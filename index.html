@@ -4905,7 +4905,7 @@ window.SZK={"PROF": {"AT": {"kier": false, "qms": "Operator", "zad": "Technik up
    i uruchamia moduły prowadzącego. Pracownik ich nie dostaje. Generuje build_ochrona_kurs.py. */
 window.PRAC=window.PRAC||{pokazKarte(st){location.hash="#kartyryzyka";setTimeout(()=>{const el=document.getElementById("kr_"+st);if(!el)return;const d=el.closest("details");if(d)d.open=true;el.scrollIntoView({behavior:"smooth",block:"start"})},80)}};
 (function(){
-const SHA="4774c45ef74b0d76",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
+const SHA="8d8b3475a20a3dba",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
 const hx=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let PINH={};
 window.PINW=r=>{if(!r)return "";if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
