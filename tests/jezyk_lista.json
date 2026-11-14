@@ -1,0 +1,111 @@
+{
+ "wyjatki": [
+  "BHP/karty_charakterystyki",
+  "Osoba Odpowiedzialna|Osob\\w+ Odpowiedzialn\\w+",
+  "[A-Z]{2,4}-(FR|IN)-\\d+ krok \\d+",
+  "[\\w./-]+\\.pdf\\b",
+  "https?://\\S+",
+  "na bazie \\w+",
+  "silnik\\w* elektryczn\\w*",
+  "silnik\\w* wentylator\\w*"
+ ],
+ "zakazane": [
+  [
+   "(?-i:\\b(W|Z)-\\d{3}\\b)",
+   "wewnętrzny numer polecenia"
+  ],
+  [
+   "(?-i:\\bA-[A-Z]{3}-\\d{2}\\b)",
+   "wewnętrzny kod wymagania"
+  ],
+  [
+   "(?-i:\\bADM\\b)",
+   "żargon wewnętrzny (dec. 128)"
+  ],
+  [
+   "(?-i:\\bAlert\\w*)",
+   "„Sprawy do załatwienia” zamiast „Alerty” (dec. 128)"
+  ],
+  [
+   "(?-i:\\bOdpowiedzialn[iy]\\b)",
+   "TS 21:32: pracownicy, nie „Odpowiedzialni”"
+  ],
+  [
+   "(?-i:\\bSW-\\d{2}\\b)",
+   "wewnętrzny numer sprawy do wyjaśnienia"
+  ],
+  [
+   "\\bChatGPT\\b|\\bGPT\\b",
+   "żargon wewnętrzny"
+  ],
+  [
+   "\\bGitHub\\w*",
+   "narzędzie techniczne (kontroler 14.11.2026)"
+  ],
+  [
+   "\\bLLM\\b",
+   "żargon wewnętrzny (dec. 128)"
+  ],
+  [
+   "\\b[a-ząćęłńóśźż]+_[a-ząćęłńóśźż_]+\\b",
+   "nazwa tabeli lub pola"
+  ],
+  [
+   "\\b\\w+\\.(py|json|sqlite|db)\\b",
+   "nazwa pliku technicznego"
+  ],
+  [
+   "\\bbaz(a|y|ie|ę|ą|ach|ami)\\b",
+   "żargon wewnętrzny (dec. 128)"
+  ],
+  [
+   "\\bcommit\\w*",
+   "pojęcie techniczne"
+  ],
+  [
+   "\\bdec(\\.|yzj\\w*)\\s*(nr\\s*)?\\d+",
+   "numer decyzji (dec. 128)"
+  ],
+  [
+   "\\bgałę?zi?\\w*\\b",
+   "pojęcie techniczne (gałąź repozytorium)"
+  ],
+  [
+   "\\bkrok(u|iem)?\\s+\\d+[a-z]*\\b",
+   "numer kroku budowy (dec. 128)"
+  ],
+  [
+   "\\bprzebudow\\w*",
+   "żargon wewnętrzny (przebudowa rejestru)"
+  ],
+  [
+   "\\brepo(zytori\\w*)?\\b",
+   "pojęcie techniczne"
+  ],
+  [
+   "\\bsilnik\\w*",
+   "żargon wewnętrzny (dec. 128)"
+  ],
+  [
+   "\\bskrypt\\w*",
+   "żargon wewnętrzny"
+  ],
+  [
+   "\\bsql\\w*",
+   "nazwa techniczna"
+  ],
+  [
+   "\\bworkflow\\w*",
+   "narzędzie techniczne (kontroler 14.11.2026)"
+  ],
+  [
+   "\\bwąt(e|k)\\w*",
+   "żargon wewnętrzny (wątek pracy)"
+  ],
+  [
+   "kontrol\\w* bazy",
+   "żargon wewnętrzny"
+  ]
+ ],
+ "zrodlo": "bhp_rejestr.jezyk_zakazany + jezyk_wyjatek (dec. 128)"
+}
