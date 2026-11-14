@@ -1,7 +1,7 @@
 name: Test strony www kursu
 on:
   push:
-    branches: [main]
+    branches: [main, 'odbior-*']
   workflow_dispatch:
 jobs:
   test:
@@ -13,12 +13,17 @@ jobs:
           node-version: 20
       - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
       - name: Czekaj na wdrożenie Pages
+        if: github.ref == 'refs/heads/main'
         run: sleep 90
-      - run: node tests/test_www.js
+      - if: github.ref == 'refs/heads/main'
+        run: node tests/test_www.js
+      - name: Kontrola języka (ten sam sprawdzacz i ta sama lista co lokalnie; dec. 128)
+        run: node tests/render_zakladki.js "$PWD/index.html" teksty_www.json && python3 tests/sprawdz_jezyk.py teksty_www.json tests/jezyk_lista.json --pokaz
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: wynik-testu-www
           path: |
             wynik_testu.json
+            teksty_www.json
             wynik_*.pdf
