@@ -4,6 +4,7 @@
   "Osoba Odpowiedzialna|Osob\\w+ Odpowiedzialn\\w+",
   "[A-Z]{2,4}-(FR|IN)-\\d+ krok \\d+",
   "[\\w./-]+\\.pdf\\b",
+  "\\(skrypty, przepisy, pytania kontrolne\\)",
   "https?://\\S+",
   "na bazie \\w+",
   "silnik\\w* elektryczn\\w*",
