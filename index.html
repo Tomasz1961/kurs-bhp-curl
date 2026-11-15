@@ -3266,14 +3266,16 @@ async function zapisz(){const g=id=>$(id).value.trim(),st=$("or_st");
   o._odczyt="ręcznie z oryginału + kontrole silnika (kurs)";o._status="DO_OCR_W_SILNIKU";if(plik)o._plik_id=plik.id;o._kontrole_json=JSON.stringify(ostKontrola.map(r=>({id:r.id,wynik:r.wynik,szcz:r.szcz})));
   try{const db=await getDb();if(!db)throw {code:"brak bazy"};await db.collection("orzeczenia").add(o);await wczytajOrz();lista();$("orz_box").hidden=true;alertMsg(`Zapisano orzeczenie: ${nazwa(w.kod_osoby)}, ważne do ${pd(w.wazne_do)}.`)}
   catch(x){st.textContent="Nie zapisano ("+(x&&x.code||"błąd")+")."}}
-function baner(){const n=D.alerty.filter(poTerminie).length,b=$("al_baner");let zam=false;try{zam=sessionStorage.getItem("al_baner_zamk")==="1"}catch(x){}
-  if(!n||zam){b.hidden=true;return}const med=D.alerty.filter(a=>poTerminie(a)&&MED(a.typ)).map(a=>a.osoba).filter(Boolean);
+function baner(){const n=D.alerty.filter(a=>WID(a)&&poTerminie(a)).length,b=$("al_baner");let zam=false;try{zam=sessionStorage.getItem("al_baner_zamk")==="1"}catch(x){}
+  if(!n||zam){b.hidden=true;return}const med=D.alerty.filter(a=>WID(a)&&poTerminie(a)&&MED(a.typ)).map(a=>a.osoba).filter(Boolean);
   b.innerHTML=`<b>Sprawy po terminie: ${n}.</b>${med.length?` Badania lekarskie: ${e([...new Set(med)].join(", "))}.`:""} <a href="#alerty">Zobacz sprawy do załatwienia</a><button type="button" id="al_bz">Zamknij</button>`;b.hidden=false;
   $("al_bz").onclick=()=>{b.hidden=true;try{sessionStorage.setItem("al_baner_zamk","1")}catch(x){}}}
 function init(){if(gotowe)return;gotowe=true;{const o=D.odrzucone||[];$("al_odrz").innerHTML=`<h3>Orzeczenia nieprzyjęte do rejestru (${o.length})</h3>`+(o.length?`<div class="tbl"><table><thead><tr><th>Osoba</th><th>Data orzeczenia</th><th>Ważne do</th><th>Reguła</th><th>Powód</th></tr></thead><tbody>${o.map(r=>`<tr class="po"><td>${e(nazwa(r.kod_osoby))}</td><td>${pd(r.data_orzeczenia)}</td><td>${pd(r.wazne_do)}</td><td>${e(r.regula)}</td><td>${e(r.powod)}</td></tr>`).join("")}</tbody></table></div><p class="note">Popraw dane albo dowód i dodaj orzeczenie ponownie.</p>`:`<p class="note">Brak – wszystkie orzeczenia dodane w kursie zostały przyjęte albo czekają na przyjęcie.</p>`)}const m=document.getElementById("main");m.insertBefore($("al_baner"),m.firstChild);
   if($("al_rodz"))$("al_rodz").onchange=lista;$("al_typ").innerHTML='<option value="">wszystkie</option>'+[...new Set(D.alerty.filter(WID).map(a=>a.typ))].map(t=>`<option value="${t}">${e(TYPY[t]||t)}</option>`).join("");
   $("al_typ").onchange=lista;$("al_po").onchange=lista;
   {const ko=[...new Set(D.alerty.flatMap(a=>String(a.odpowiedzialni||"").split(",").map(x=>x.trim()).filter(Boolean)))].sort();$("al_os").innerHTML='<option value="">wszyscy</option>'+ko.map(k=>`<option value="${e(k)}">${e(nazwa(k))}</option>`).join("");$("al_os").onchange=lista;
+   const A=D.auto_wysylka;if(A){const p=document.createElement("p");p.className="note";p.id="al_auto";p.textContent="Automatyczne przypomnienia o terminach: "+(A.wartosc?"włączone":"wyłączone")+(A.kto?" ("+A.kto+(A.kiedy_utc?", "+A.kiedy_utc.slice(0,16).replace("T"," ")+" UTC":"")+")":"")+". Włącza je i wyłącza właściciel kursu w zakładce Pracownicy (ramka „Przypomnienia o terminach”). Osoby nieobecne nie dostają przypomnień.";$("al_licz").parentNode.after(p)}}
+  {const ko=[...new Set(D.alerty.filter(WID).flatMap(a=>String(a.odpowiedzialni||"").split(",").map(x=>x.trim()).filter(Boolean)))].sort();$("al_os").innerHTML='<option value="">wszyscy</option>'+ko.map(k=>`<option value="${e(k)}">${e(nazwa(k))}</option>`).join("");$("al_os").onchange=lista;
    const A=D.auto_wysylka;if(A){const p=document.createElement("p");p.className="note";p.id="al_auto";p.textContent="Automatyczne przypomnienia o terminach: "+(A.wartosc?"włączone":"wyłączone")+(A.kto?" ("+A.kto+(A.kiedy_utc?", "+A.kiedy_utc.slice(0,16).replace("T"," ")+" UTC":"")+")":"")+". Włącza je i wyłącza właściciel kursu w zakładce Pracownicy (ramka „Przypomnienia o terminach”). Osoby nieobecne nie dostają przypomnień.";$("al_licz").parentNode.after(p)}}
   $("al_lista").onclick=ev=>{const b=ev.target.closest("button");if(!b)return;if(b.dataset.skw){const a=D.alerty.find(x=>String(x.id)===b.dataset.skw);return skierowanie(a.kod_osoby,a.typ==="MED_BRAK"?"okresowe":"okresowe")}
     if(b.dataset.orz)return formularz(b.dataset.orz);if(b.dataset.arch)return archiwum(b.dataset.arch)}}
@@ -4584,6 +4586,12 @@ function podgladShim(S,real,mojeId){const odmowa=()=>{podgladBaner("Zmiana odrzu
  const cref=kol=>({id:kol.split("/").pop(),path:kol,get:async()=>qs(kol),doc:id=>dref(kol,id),add:odmowa,where:()=>{throw new Error("podgląd: where nieobsługiwane")},orderBy:()=>{throw new Error("podgląd: orderBy nieobsługiwane")},limit:()=>cref(kol),onSnapshot:n=>{n(qs(kol));return()=>{}}});
  return{collection:p=>cref(p),doc:p=>{const s=p.split("/");return dref(s.slice(0,-1).join("/"),s[s.length-1])},PODGLAD:true}}
 /* części kopii jednej generacji: <gen>_c000…; meta.gen wskazuje generację opublikowaną dopiero po zapisaniu wszystkich jej części */
+/* odebranie zostawia znacznik podglad/<id>/odwolanie/o z numerem blokady (wersja dokumentu blokady rośnie przy każdym jej przejęciu);
+   kopia ważna tylko, gdy jej numer jest większy – spóźniony zapis okna zatrzymanego dłużej niż blokada nie przywraca odebranego podglądu */
+const PODGLAD_FORMAT="podglad-2";
+async function podgladOdwolany(ref,meta){const o=await ref.collection("odwolanie").doc("o").get();if(!o.exists)return false;const e=Number((o.data()||{}).epoka);
+  return !(Number(meta&&meta.epoka)>e)}
+function podgladBezPinWyniku(v){if(Array.isArray(v))return v.map(podgladBezPinWyniku);if(v&&typeof v==="object"){const o={};for(const k of Object.keys(v))if(k!=="pin_wynik"&&k!=="pin_skrot")o[k]=podgladBezPinWyniku(v[k]);return o}return v}
 function podgladNazwa(gen,i){return(gen?gen+"_":"")+"c"+String(i).padStart(3,"0")}
 function podgladZloz(meta,docs){const gen=meta.gen||"";const n=meta.czesci||0;const moje=docs.filter(d=>gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id));
   if(moje.length!==n)throw new Error("kopia niepełna ("+moje.length+" z "+n+" części)");
@@ -4595,7 +4603,10 @@ function podgladZloz(meta,docs){const gen=meta.gen||"";const n=meta.czesci||0;co
 function czyPodglad(){if(!podgladP)podgladP=(async()=>{try{const u=await getUser();if(!u)return null;if((await u.isOwner())||(await u.canEdit()))return null;
   const real=await getDbReal();const id=await u.id();if(!real||!id)return null;const ref=real.collection("podglad").doc(id);
   let meta=null,S=null,blad="";for(let proba=0;proba<3&&!S;proba++){const m=await ref.get();if(!m.exists)return null;meta=m.data()||{};
+    if(await podgladOdwolany(ref,meta))return null;
     try{S=podgladZloz(meta,(await ref.collection("k").get()).docs)}catch(x){blad=String(x&&x.message||x)}}
+  /* wynik PIN-u tylko z kopii w formacie z oczyszczeniem przez prowadzącego; ze starej kopii (v13.40) pole odrzucone */
+  const pinOk=meta.format===PODGLAD_FORMAT;if(S&&!pinOk)S=podgladBezPinWyniku(S);document.documentElement.dataset.podgladPin=pinOk?"1":"0";
   document.documentElement.classList.add("tryb-podglad");
   const kiedy=meta.odswiezono?new Date(meta.odswiezono).toLocaleString("pl-PL"):"?";
   const tekst=S?"Tryb podglądu (bez zmian). Dane prowadzącego z "+kiedy+". Zmiany wprowadza wyłącznie T. Stuczyński.":"Tryb podglądu (bez zmian): kopia danych jest właśnie odświeżana ("+blad+"). Proszę otworzyć kurs ponownie za chwilę.";
@@ -4620,24 +4631,27 @@ async function podgladSha(t){const b=await crypto.subtle.digest("SHA-256",new Te
 const PODGLAD_OKNO=Math.random().toString(36).slice(2)+Date.now().toString(36);
 function podgladKolejno(id,f){const p=(podgladKolejka[id]||Promise.resolve()).catch(()=>{}).then(f);podgladKolejka[id]=p;return p}
 async function podgladZamek(db,id,f){const z=db.collection("podglad").doc(id).collection("zamek").doc("z");const koniec=Date.now()+150000;
-  for(;;){const r=await z.acquire({holder:PODGLAD_OKNO,ttlMs:120000});if(r&&r.acquired)break;
+  let epoka;for(;;){const r=await z.acquire({holder:PODGLAD_OKNO,ttlMs:120000});if(r&&r.acquired){epoka=Number(r.version);break}
     if(Date.now()>koniec)throw new Error("podgląd tej osoby zmienia teraz inne okno – spróbuj za chwilę");
     const w=r&&r.expiresAt?Math.min(1000,Math.max(200,Date.parse(r.expiresAt)-Date.now())):1000;await new Promise(t=>setTimeout(t,w))}
   const odnow=async()=>{const r=await z.acquire({holder:PODGLAD_OKNO,ttlMs:120000});if(!r||!r.acquired)throw new Error("utracono blokadę podglądu – kopia nie została zmieniona")};
-  try{return await f(odnow)}finally{try{await z.acquire({holder:PODGLAD_OKNO,ttlMs:1000})}catch(x){}}}
+  if(!(epoka>0)){try{await z.acquire({holder:PODGLAD_OKNO,ttlMs:1000})}catch(x){}throw new Error("brak numeru blokady podglądu – kopia nie została zmieniona")}
+  try{return await f(odnow,epoka)}finally{try{await z.acquire({holder:PODGLAD_OKNO,ttlMs:1000})}catch(x){}}}
 /* usuwa części jednej generacji ("" = części bez generacji, c000…) albo – przy odebraniu – wszystkie */
 async function podgladUsunGen(ref,gen){const q=await ref.collection("k").get();for(const d of q.docs)if(gen===null||(gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id)))await ref.collection("k").doc(d.id).delete()}
-async function podgladZapisz(db,id,nowe,wymus){return podgladZamek(db,id,async odnow=>{const ref=db.collection("podglad").doc(id);const g=await ref.get();const stary=g.exists?(g.data()||{}):null;
+async function podgladZapisz(db,id,nowe,wymus){return podgladZamek(db,id,async(odnow,epoka)=>{const ref=db.collection("podglad").doc(id);const g=await ref.get();let stary=g.exists?(g.data()||{}):null;
+  /* kopia zapisana po odebraniu (spóźnione okno): nie jest podglądem – usunąć ją, nie odświeżać */
+  if(stary&&await podgladOdwolany(ref,stary)){await ref.delete();await podgladUsunGen(ref,null);stary=null}
   if(!nowe&&!stary)return false;/* odświeżenie po odebraniu podglądu: nic nie robić */
   const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
   const cz=podgladCzesci(rek);const gen=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   try{for(let i=0;i<cz.length;i++){await odnow();await ref.collection("k").doc(podgladNazwa(gen,i)).set({rek:cz[i]})}
     await odnow();const teraz=await ref.get();const tm=teraz.exists?(teraz.data()||{}):null;
-    if(stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!!tm){await podgladUsunGen(ref,gen).catch(()=>{});if(!tm&&stary)return false;throw new Error("podgląd zmieniony poza blokadą – odśwież stronę")}
-    await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"})}
+    if((stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!!tm)||await podgladOdwolany(ref,{epoka})){await podgladUsunGen(ref,gen).catch(()=>{});if(!tm&&stary)return false;throw new Error("podgląd zmieniony poza blokadą – odśwież stronę")}
+    await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y",epoka,format:PODGLAD_FORMAT})}
   catch(x){await podgladUsunGen(ref,gen).catch(()=>{});throw x}
   if(stary)await podgladUsunGen(ref,stary.gen||"").catch(()=>{});return true})}
-async function podgladOdbierz(db,id){return podgladZamek(db,id,async()=>{const ref=db.collection("podglad").doc(id);await ref.delete();await podgladUsunGen(ref,null)})}
+async function podgladOdbierz(db,id){return podgladZamek(db,id,async(odnow,epoka)=>{const ref=db.collection("podglad").doc(id);await ref.collection("odwolanie").doc("o").set({epoka,odebrano:new Date().toISOString()});await ref.delete();await podgladUsunGen(ref,null)})}
 /* odświeżenie przy wejściu prowadzącego: błąd jednej osoby nie zatrzymuje innych; zwraca listę błędów do stałego komunikatu w panelu */
 async function podgladOdswiezWszystkie(db){const bl=[];let q;try{q=await db.collection("podglad").get()}catch(x){return[{id:"",blad:"nie udało się odczytać listy podglądów"}]}
   for(const d of q.docs){try{await podgladKolejno(d.id,()=>podgladZapisz(db,d.id,false,false))}catch(x){bl.push({id:d.id,blad:String(x&&x.message||x)})}}return bl}
@@ -4999,7 +5013,7 @@ window.PRAC=window.PRAC||{pokazKarte(st){location.hash="#kartyryzyka";setTimeout
 const SHA="ae4d29debe3f50d8",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
 const hx=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let PINH={};
-window.PINW=r=>{if(!r)return "";if(document.documentElement.classList.contains("tryb-podglad"))return r.pin_wynik!==undefined?r.pin_wynik+" (sprawdzone przy kopii)":(r.weryfikacja||"");if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
+window.PINW=r=>{if(!r)return "";if(document.documentElement.classList.contains("tryb-podglad")){if(document.documentElement.dataset.podgladPin!=="1")return "weryfikacja PIN-u niedostępna do odświeżenia kopii przez prowadzącego";return r.pin_wynik!==undefined?r.pin_wynik+" (sprawdzone przy kopii)":(r.weryfikacja||"")}if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
 async function shaT(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function wczytajPiny(){try{const db=await getDb();const g=await db.collection("piny").doc("aktualne").get();PINH=g.exists?(g.data()||{}):{}}catch(x){PINH={}}}
 window.wczytajPiny=wczytajPiny;window.wczytajPinyScisle=async()=>{const db=await getDbReal();const g=await db.collection("piny").doc("aktualne").get();PINH=g.exists?(g.data()||{}):{}};
