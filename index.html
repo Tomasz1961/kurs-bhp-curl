@@ -3077,7 +3077,7 @@ return {show,pokazKarte,drukKarte};
 <section id="alerty" data-title="Sprawy do załatwienia" data-sign="mand">
   <div class="mhead"><span class="sign mand"></span><div><div class="eyebrow">Dla prowadzącego</div><h2>Sprawy do załatwienia: co jest po terminie, kto odpowiada, co zrobić</h2></div></div>
   <div class="prose"><p>Tu są wszystkie sprawy z terminem: badania lekarskie, szkolenia BHP, umowy, karty charakterystyki i inne. Sprawy po terminie są oznaczone na czerwono. Przy każdej sprawie podano, kto za nią odpowiada i co trzeba zrobić. Przy badaniach lekarskich drukujesz skierowanie, a po badaniu dodajesz orzeczenie ze skanem. Sprawa zostaje zamknięta, gdy orzeczenie zostanie przyjęte do rejestru.</p></div>
-  <div class="btnrow"><label>Rodzaj <select id="al_typ"><option value="">wszystkie</option></select></label><label>Pracownik <select id="al_os"><option value="">wszyscy</option></select></label><label><input type="checkbox" id="al_po"> tylko po terminie</label><span class="status" id="al_licz"></span></div>
+  <div class="btnrow"><label>Grupa <select id="al_rodz"><option value="">wszystkie</option><option value="zadanie">zadania</option><option value="decyzja_TS">decyzje T. Stuczyńskiego</option><option value="brak_danych">braki danych</option></select></label><label>Rodzaj <select id="al_typ"><option value="">wszystkie</option></select></label><label>Pracownik <select id="al_os"><option value="">wszyscy</option></select></label><label><input type="checkbox" id="al_po"> tylko po terminie</label><span class="status" id="al_licz"></span></div>
   <div class="tbl al"><table><thead><tr><th>Termin</th><th>Rodzaj</th><th>Osoba</th><th>Co jest nie tak</th><th>Co zrobić</th><th>Stan</th><th></th></tr></thead><tbody id="al_lista"></tbody></table></div>
   <div id="orz_box" class="orz" hidden></div>
   <details><summary id="al_zamk_sum">Zamknięte</summary><div class="tbl"><table><tbody id="al_zamk"></tbody></table></div></details>
@@ -3175,6 +3175,9 @@ const pd=d=>d&&/^\d{4}-\d\d-\d\d/.test(d)?d.slice(0,10).split("-").reverse().joi
 const $=id=>document.getElementById(id);
 const DZIS=()=>new Date().toISOString().slice(0,10);
 const TYPY={MED_BADANIE:"badanie lekarskie – termin",MED_BRAK:"brak orzeczenia lekarskiego",BHP_OKRESOWE:"szkolenie okresowe BHP",BHP_WSTEPNE:"szkolenie wstępne BHP",UMOWA:"umowa o pracę – koniec",NARUSZENIE:"niezgodność do wyjaśnienia",DOWOD:"brak dokumentu potwierdzającego",AKT_PRZEGLAD:"przegląd przepisu",DOKUMENT:"dokument do sprawdzenia",CIAGLOSC:"ciągłość zatrudnienia",KARTA_DOSTAWY:"karta charakterystyki z dostawy",KARTA_PRZEGLAD:"przegląd karty charakterystyki",STATUS:"nieobecność bez wniosku",KARTA_CZASU:"karta czasu pracy",BHP_DATA:"szkolenie BHP – brak daty",BHP_ZALEGLOSC:"szkolenie BHP – zaległość",KARTA_BRAK:"brak karty charakterystyki",ZAPOZNANIE:"zapoznanie z dokumentem"};
+Object.assign(TYPY,{KARTY_DOSTAWCY:"karty charakterystyki – pismo do dostawcy",KARTA_SUBSTANCJI:"karta charakterystyki substancji",KOMPLET_BHP:"komplet dokumentów BHP osoby",KARTA_PODPIS:"podpisana karta oceny ryzyka – brak skanu",BHP_PO_POWROCIE:"szkolenie BHP po powrocie do pracy",BHP_PULAWY:"szkolenie BHP w dziale BHP w Puławach",SPRAWA:"sprawa do decyzji",ZMIANA_NIEPRZEJRZANA:"zmiana przepisu do przejrzenia",PRZEPIS_BEZ_TRESCI:"przepis bez treści w rejestrze"});
+const RODZ={zadanie:"zadanie",decyzja_TS:"decyzja T. Stuczyńskiego",brak_danych:"brak danych"};
+const WID=a=>a.rodzaj!=="praca_silnika";
 const MED=t=>/^MED_/.test(t);
 let orz=null,rola=false,gotowe=false,plik=null,odczyt=null;
 async function czyProwadzacy(){try{const u=await getUser();return !!(u&&((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad())))}catch(x){return false}}
@@ -3185,11 +3188,11 @@ function dodane(a){return MED(a.typ)&&(orz||[]).some(o=>o.kod_osoby===a.kod_osob
 function wiersz(a){const st=dodane(a)?'<span class="ok">orzeczenie dodane – czeka na przyjęcie do rejestru</span>':poTerminie(a)?`po terminie ${Math.round((Date.parse(DZIS())-Date.parse(a.termin))/864e5)} dni`:e(a.status||"otwarte");
   const btn=[];if(MED(a.typ)&&a.kod_osoby){btn.push(`<button type="button" data-skw="${a.id}">Skierowanie</button>`,`<button type="button" data-orz="${e(a.kod_osoby)}">Dodaj orzeczenie</button>`)}
   if(a.kod_osoby)btn.push(`<button type="button" data-arch="${e(a.kod_osoby)}">Archiwum osoby</button>`);
-  return `<tr class="${poTerminie(a)?"po":blisko(a)?"blisko":""}${dodane(a)?" dodane":""}" data-id="${a.id}"><td class="num">${pd(a.termin)||"–"}</td><td>${e(TYPY[a.typ]||a.typ)}</td><td>${e(a.osoba||"–")}</td><td>${e(a.opis)}${a.uwagi?`<br><small>${e(a.uwagi)}</small>`:""}</td><td><small>${e(a.akcja)}${a.odpowiedzialni?`<br>Pracownicy: ${e(String(a.odpowiedzialni).split(",").map(x=>nazwa(x.trim())).join(", "))}`:""}${a.podstawa?`<br>Podstawa: ${e(a.podstawa)}`:""}</small></td><td>${st}</td><td>${btn.join(" ")}</td></tr>`}
-function lista(){const typ=$("al_typ").value,po=$("al_po").checked,os=($("al_os")||{}).value||"";
-  const r=D.alerty.filter(a=>(!typ||a.typ===typ)&&(!po||poTerminie(a))&&(!os||a.kod_osoby===os||String(a.odpowiedzialni||"").split(",").map(x=>x.trim()).includes(os))).sort((a,b)=>(a.termin||"9999").localeCompare(b.termin||"9999"));
+  return `<tr class="${poTerminie(a)?"po":blisko(a)?"blisko":""}${dodane(a)?" dodane":""}" data-id="${a.id}"><td class="num">${pd(a.termin)||"–"}</td><td>${e(TYPY[a.typ]||a.typ)}${a.rodzaj&&RODZ[a.rodzaj]?`<br><small>${e(RODZ[a.rodzaj])}</small>`:""}</td><td>${e(a.osoba||"–")}</td><td>${e(a.opis)}${Array.isArray(a.zgrupowane)&&a.zgrupowane.length>1?`<br><small>połączono ${a.zgrupowane.length} alertów</small>`:""}${a.uwagi?`<br><small>${e(a.uwagi)}</small>`:""}</td><td><small>${e(a.akcja)}${a.odpowiedzialni?`<br>Pracownicy: ${e(String(a.odpowiedzialni).split(",").map(x=>nazwa(x.trim())).join(", "))}`:""}${a.podstawa?`<br>Podstawa: ${e(a.podstawa)}`:""}</small></td><td>${st}</td><td>${btn.join(" ")}</td></tr>`}
+function lista(){const typ=$("al_typ").value,po=$("al_po").checked,os=($("al_os")||{}).value||"",rz=($("al_rodz")||{}).value||"";
+  const r=D.alerty.filter(a=>WID(a)&&(!rz||a.rodzaj===rz)&&(!typ||a.typ===typ)&&(!po||poTerminie(a))&&(!os||a.kod_osoby===os||String(a.odpowiedzialni||"").split(",").map(x=>x.trim()).includes(os))).sort((a,b)=>(a.termin||"9999").localeCompare(b.termin||"9999"));
   $("al_lista").innerHTML=r.map(wiersz).join("")||'<tr><td colspan="7">Brak spraw.</td></tr>';
-  $("al_licz").textContent=`${r.length} z ${D.alerty.length}; po terminie: ${D.alerty.filter(poTerminie).length}`;
+  {const W=D.alerty.filter(WID),ile=k=>W.filter(a=>a.rodzaj===k).length;$("al_licz").textContent=(W.some(a=>a.rodzaj)?`Zadania: ${ile("zadanie")} · decyzje T. Stuczyńskiego: ${ile("decyzja_TS")} · braki danych: ${ile("brak_danych")}. `:"")+`Pokazano ${r.length} z ${W.length}; po terminie: ${W.filter(poTerminie).length}`}
   $("al_zamk_sum").textContent=`Zamknięte (${D.zamkniete.length})`;
   $("al_zamk").innerHTML=D.zamkniete.map(a=>`<tr><td>${pd(a.zamknieto)}</td><td>${e(TYPY[a.typ]||a.typ)}</td><td>${e(a.osoba||"")}</td><td>${e(a.opis)}</td><td><small>${e(a.dowod_zamkniecia||"")}</small></td></tr>`).join("");
   $("al_zr").textContent=`Źródło: ${D.zrodlo}. Liczba dni po terminie jest liczona na dzień dzisiejszy. Orzeczenia: dodane w kursie.`;}
@@ -3268,7 +3271,7 @@ function baner(){const n=D.alerty.filter(poTerminie).length,b=$("al_baner");let 
   b.innerHTML=`<b>Sprawy po terminie: ${n}.</b>${med.length?` Badania lekarskie: ${e([...new Set(med)].join(", "))}.`:""} <a href="#alerty">Zobacz sprawy do załatwienia</a><button type="button" id="al_bz">Zamknij</button>`;b.hidden=false;
   $("al_bz").onclick=()=>{b.hidden=true;try{sessionStorage.setItem("al_baner_zamk","1")}catch(x){}}}
 function init(){if(gotowe)return;gotowe=true;{const o=D.odrzucone||[];$("al_odrz").innerHTML=`<h3>Orzeczenia nieprzyjęte do rejestru (${o.length})</h3>`+(o.length?`<div class="tbl"><table><thead><tr><th>Osoba</th><th>Data orzeczenia</th><th>Ważne do</th><th>Reguła</th><th>Powód</th></tr></thead><tbody>${o.map(r=>`<tr class="po"><td>${e(nazwa(r.kod_osoby))}</td><td>${pd(r.data_orzeczenia)}</td><td>${pd(r.wazne_do)}</td><td>${e(r.regula)}</td><td>${e(r.powod)}</td></tr>`).join("")}</tbody></table></div><p class="note">Popraw dane albo dowód i dodaj orzeczenie ponownie.</p>`:`<p class="note">Brak – wszystkie orzeczenia dodane w kursie zostały przyjęte albo czekają na przyjęcie.</p>`)}const m=document.getElementById("main");m.insertBefore($("al_baner"),m.firstChild);
-  $("al_typ").innerHTML='<option value="">wszystkie</option>'+[...new Set(D.alerty.map(a=>a.typ))].map(t=>`<option value="${t}">${e(TYPY[t]||t)}</option>`).join("");
+  if($("al_rodz"))$("al_rodz").onchange=lista;$("al_typ").innerHTML='<option value="">wszystkie</option>'+[...new Set(D.alerty.filter(WID).map(a=>a.typ))].map(t=>`<option value="${t}">${e(TYPY[t]||t)}</option>`).join("");
   $("al_typ").onchange=lista;$("al_po").onchange=lista;
   {const ko=[...new Set(D.alerty.flatMap(a=>String(a.odpowiedzialni||"").split(",").map(x=>x.trim()).filter(Boolean)))].sort();$("al_os").innerHTML='<option value="">wszyscy</option>'+ko.map(k=>`<option value="${e(k)}">${e(nazwa(k))}</option>`).join("");$("al_os").onchange=lista;
    const A=D.auto_wysylka;if(A){const p=document.createElement("p");p.className="note";p.id="al_auto";p.textContent="Automatyczne przypomnienia o terminach: "+(A.wartosc?"włączone":"wyłączone")+(A.kto?" ("+A.kto+(A.kiedy_utc?", "+A.kiedy_utc.slice(0,16).replace("T"," ")+" UTC":"")+")":"")+". Włącza je i wyłącza właściciel kursu w zakładce Pracownicy (ramka „Przypomnienia o terminach”). Osoby nieobecne nie dostają przypomnień.";$("al_licz").parentNode.after(p)}}
@@ -3603,7 +3606,7 @@ return {pokaz,karty,drukKarta,D,badStan,badCell,badBox};
 </div>
 </div>
 
-<!--WERSJA-START--><div id="kurs_wersja_stopka" style="text-align:center;font-size:12px;opacity:.7;padding:14px 8px">Kurs BHP CURL – wersja v13.40 z 15.11.2026</div><!--WERSJA-KONIEC-->
+<!--WERSJA-START--><div id="kurs_wersja_stopka" style="text-align:center;font-size:12px;opacity:.7;padding:14px 8px">Kurs BHP CURL – wersja v13.41 z 15.11.2026</div><!--WERSJA-KONIEC-->
 <div id="printarea" aria-hidden="true"></div>
 <script>
 /* ---------- people (codes = register adm.sqlite) ---------- */
@@ -4572,7 +4575,7 @@ async function initLogin(){
 let dbP=null,userP=null;
 /*PODGLAD-START*/function getDbReal(){if(!dbP)dbP=window.claude?.use?window.claude.use("db"):Promise.resolve(null);return dbP}
 const PODGLAD_KOL=["wyniki","przebieg","przyjecia","karta_ryzyka_podpis","orzeczenia","kurs_admin","karty_czasu","karty_czasu_wynik","dziennik"];
-const PODGLAD_MAX=180000;let podgladP=null;
+const PODGLAD_MAX=180000;let podgladP=null;const podgladKolejka={};
 function podgladBaner(t){let b=document.getElementById("podglad_baner");if(!b){const m=document.querySelector("main")||document.body;b=document.createElement("p");b.id="podglad_baner";b.setAttribute("role","status");b.style.cssText="background:#1f4e79;color:#fff;padding:8px 12px;margin:0 0 8px;border-radius:6px";m.insertBefore(b,m.firstChild)}b.textContent=t}
 function podgladShim(S,real,mojeId){const odmowa=()=>{podgladBaner("Zmiana odrzucona: tryb podglądu. Zmiany wprowadza wyłącznie T. Stuczyński.");return Promise.reject(Object.assign(new Error("Tryb podglądu – zmiany wprowadza wyłącznie T. Stuczyński."),{code:"podglad"}))};
  const sd=(id,d)=>({id,exists:d!==undefined&&d!==null,data:()=>d===null?undefined:d,metadata:{fromCache:true,hasPendingWrites:false}});
@@ -4580,27 +4583,50 @@ function podgladShim(S,real,mojeId){const odmowa=()=>{podgladBaner("Zmiana odrzu
  const qs=kol=>{const o=S[kol]||{};const docs=Object.keys(o).map(i=>sd(i,o[i]));return{docs,size:docs.length,empty:!docs.length,docChanges:()=>docs.map((d,i)=>({type:"added",doc:d,oldIndex:-1,newIndex:i})),forEach:f=>docs.forEach(f)}};
  const cref=kol=>({id:kol.split("/").pop(),path:kol,get:async()=>qs(kol),doc:id=>dref(kol,id),add:odmowa,where:()=>{throw new Error("podgląd: where nieobsługiwane")},orderBy:()=>{throw new Error("podgląd: orderBy nieobsługiwane")},limit:()=>cref(kol),onSnapshot:n=>{n(qs(kol));return()=>{}}});
  return{collection:p=>cref(p),doc:p=>{const s=p.split("/");return dref(s.slice(0,-1).join("/"),s[s.length-1])},PODGLAD:true}}
+/* części kopii jednej generacji: <gen>_c000…; meta.gen wskazuje generację opublikowaną dopiero po zapisaniu wszystkich jej części */
+function podgladNazwa(gen,i){return(gen?gen+"_":"")+"c"+String(i).padStart(3,"0")}
+function podgladZloz(meta,docs){const gen=meta.gen||"";const n=meta.czesci||0;const moje=docs.filter(d=>gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id));
+  if(moje.length!==n)throw new Error("kopia niepełna ("+moje.length+" z "+n+" części)");
+  const S={},pola={},seg={};moje.sort((a,b)=>a.id<b.id?-1:1).forEach(d=>{const x=d.data()||{};(x.rek||[]).forEach(r=>{const k=r.kol+"/"+r.id;
+    if(r.seg!==undefined){((seg[k]=seg[k]||{})[r.klucz]=seg[k][r.klucz]||[])[r.seg]=r.d}
+    else if(r.klucz!==undefined)(pola[k]=pola[k]||{})[r.klucz]=r.d;else (S[r.kol]=S[r.kol]||{})[r.id]=r.d})});
+  Object.keys(seg).forEach(k=>Object.keys(seg[k]).forEach(kl=>{const t=seg[k][kl];for(let i=0;i<t.length;i++)if(!Array.isArray(t[i]))throw new Error("kopia niepełna (brak odcinka "+i+" pola "+kl+")");(pola[k]=pola[k]||{})[kl]=[].concat(...t)}));
+  Object.keys(pola).forEach(k=>{const i=k.indexOf("/");const kol=k.slice(0,i),did=k.slice(i+1);(S[kol]=S[kol]||{})[did]=pola[k]});return S}
 function czyPodglad(){if(!podgladP)podgladP=(async()=>{try{const u=await getUser();if(!u)return null;if((await u.isOwner())||(await u.canEdit()))return null;
-  const real=await getDbReal();const id=await u.id();if(!real||!id)return null;const m=await real.collection("podglad").doc(id).get();if(!m.exists)return null;
-  const meta=m.data()||{};const cz=await real.collection("podglad").doc(id).collection("k").get();const S={};const czesci={};
-  cz.docs.forEach(d=>{const x=d.data()||{};(x.rek||[]).forEach(r=>{if(r.klucz!==undefined){const k=r.kol+"/"+r.id;(czesci[k]=czesci[k]||{})[r.klucz]=r.d}else (S[r.kol]=S[r.kol]||{})[r.id]=r.d})});
-  Object.keys(czesci).forEach(k=>{const i=k.indexOf("/");const kol=k.slice(0,i),did=k.slice(i+1);(S[kol]=S[kol]||{})[did]=czesci[k]});
+  const real=await getDbReal();const id=await u.id();if(!real||!id)return null;const ref=real.collection("podglad").doc(id);
+  let meta=null,S=null,blad="";for(let proba=0;proba<3&&!S;proba++){const m=await ref.get();if(!m.exists)return null;meta=m.data()||{};
+    try{S=podgladZloz(meta,(await ref.collection("k").get()).docs)}catch(x){blad=String(x&&x.message||x)}}
   document.documentElement.classList.add("tryb-podglad");
   const kiedy=meta.odswiezono?new Date(meta.odswiezono).toLocaleString("pl-PL"):"?";
-  const pokaz=()=>podgladBaner("Tryb podglądu (bez zmian). Dane prowadzącego z "+kiedy+". Zmiany wprowadza wyłącznie T. Stuczyński.");
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",pokaz);else pokaz();
-  return{db:podgladShim(S,real,id),meta}}catch(x){return null}})();return podgladP}
+  const tekst=S?"Tryb podglądu (bez zmian). Dane prowadzącego z "+kiedy+". Zmiany wprowadza wyłącznie T. Stuczyński.":"Tryb podglądu (bez zmian): kopia danych jest właśnie odświeżana ("+blad+"). Proszę otworzyć kurs ponownie za chwilę.";
+  const pokaz=()=>podgladBaner(tekst);if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",pokaz);else pokaz();
+  return{db:podgladShim(S||{},real,id),meta,pelna:!!S}}catch(x){return null}})();return podgladP}
 async function getDb(){const real=await getDbReal();const p=await czyPodglad();return p?p.db:real}
 /* właściciel: kopia danych dla osób z podglądem */
-async function podgladRekordy(db){const rek=[];for(const kol of PODGLAD_KOL){let q;try{q=await db.collection(kol).get()}catch(x){continue}
-  for(const d of q.docs){const v=d.data();if(v===undefined)continue;const s=JSON.stringify(v);if(s.length<=PODGLAD_MAX)rek.push({kol,id:d.id,d:v});else Object.keys(v).forEach(k=>rek.push({kol,id:d.id,klucz:k,d:v[k]}))}}return rek}
+function podgladBezPin(v){if(Array.isArray(v))return v.map(podgladBezPin);if(v&&typeof v==="object"){const o={};for(const k of Object.keys(v))if(k!=="pin_skrot"&&k!=="pin_wynik")o[k]=podgladBezPin(v[k]);
+  if(v.pin_skrot)o.pin_wynik=window.PINW?String(PINW(v)):"weryfikacja PIN-u niedostępna";return o}return v}
+async function podgladRekordy(db){if(typeof wczytajPiny==="function")await wczytajPiny();const rek=[];
+  for(const kol of PODGLAD_KOL){let q;try{q=await db.collection(kol).get()}catch(x){throw new Error("nie udało się odczytać „"+kol+"” – kopia nie została zmieniona")}
+  for(const d of q.docs){let v=d.data();if(v===undefined)continue;v=podgladBezPin(v);if(JSON.stringify(v).length<=PODGLAD_MAX){rek.push({kol,id:d.id,d:v});continue}
+    for(const k of Object.keys(v)){const x=v[k];if(!Array.isArray(x)||(JSON.stringify(x)||"").length<=PODGLAD_MAX){rek.push({kol,id:d.id,klucz:k,d:x});continue}
+      let s=[],n=0,i=0;for(const el of x){const l=(JSON.stringify(el)||"null").length+1;if(n+l>PODGLAD_MAX&&s.length){rek.push({kol,id:d.id,klucz:k,seg:i++,d:s});s=[];n=0}s.push(el);n+=l}
+      rek.push({kol,id:d.id,klucz:k,seg:i++,d:s})}}}return rek}
 function podgladCzesci(rek){const cz=[];let cur=[],n=0;for(const r of rek){const s=JSON.stringify(r).length;if(s>PODGLAD_MAX*1.3)throw new Error("podgląd: zapis "+r.kol+"/"+r.id+(r.klucz?"/"+r.klucz:"")+" za duży ("+s+" B)");if(n+s>PODGLAD_MAX&&cur.length){cz.push(cur);cur=[];n=0}cur.push(r);n+=s}if(cur.length)cz.push(cur);return cz}
 async function podgladSha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-async function podgladZapisz(db,id,stary,wymus){const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
-  const cz=podgladCzesci(rek);const ref=db.collection("podglad").doc(id);for(let i=0;i<cz.length;i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).set({rek:cz[i]});
-  for(let i=cz.length;i<((stary&&stary.czesci)||0);i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).delete();
-  await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"});return true}
-async function podgladOdswiezWszystkie(db){try{const q=await db.collection("podglad").get();for(const d of q.docs){const v=d.data();if(v)await podgladZapisz(db,d.id,v,false)}}catch(x){}}
+/* operacje na podglądzie jednej osoby idą po kolei (odebranie czeka na trwające odświeżenie) */
+function podgladKolejno(id,f){const p=(podgladKolejka[id]||Promise.resolve()).catch(()=>{}).then(f);podgladKolejka[id]=p;return p}
+async function podgladUsunCzesci(ref,zostaw){const q=await ref.collection("k").get();for(const d of q.docs)if(!zostaw||!d.id.startsWith(zostaw+"_c"))await ref.collection("k").doc(d.id).delete()}
+async function podgladZapisz(db,id,nowe,wymus){const ref=db.collection("podglad").doc(id);const g=await ref.get();const stary=g.exists?(g.data()||{}):null;
+  if(!nowe&&!stary)return false;/* odświeżenie po odebraniu podglądu: nic nie robić */
+  const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
+  const cz=podgladCzesci(rek);const gen=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  for(let i=0;i<cz.length;i++)await ref.collection("k").doc(podgladNazwa(gen,i)).set({rek:cz[i]});
+  const teraz=await ref.get();const tm=teraz.exists?(teraz.data()||{}):null;
+  if(stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!nowe){await podgladUsunCzesci(ref,null).catch(()=>{});if(!tm)return false;throw new Error("podgląd zmieniony w innym oknie – odśwież stronę")}
+  await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"});
+  await podgladUsunCzesci(ref,gen);return true}
+async function podgladOdbierz(db,id){const ref=db.collection("podglad").doc(id);await ref.delete();await podgladUsunCzesci(ref,null)}
+async function podgladOdswiezWszystkie(db){let q;try{q=await db.collection("podglad").get()}catch(x){return}for(const d of q.docs)await podgladKolejno(d.id,()=>podgladZapisz(db,d.id,false,false)).catch(()=>{})}
 async function podgladPanel(){const sec=document.getElementById("pracownicy");if(!sec||document.getElementById("podglad_panel"))return;const db=await getDbReal();let u=null;try{u=await getUser()}catch(x){}if(!db||!u)return;
   const box=document.createElement("div");box.id="podglad_panel";box.className="prose";box.style.cssText="border:2px solid #1f4e79;border-radius:8px;padding:10px 14px;margin:12px 0";
   const pin=document.getElementById("pin_panel");if(pin)pin.after(box);else sec.prepend(box);
@@ -4614,9 +4640,9 @@ async function podgladPanel(){const sec=document.getElementById("pracownicy");if
       box.querySelector("#pg_wyniki").innerHTML=hits.filter(h=>!h.isMe).map(h=>`<p>${E(h.name||"(bez nazwy)")} <button type="button" data-pgn="${E(h.id)}">Nadaj podgląd</button></p>`).join("")||"<p>Brak wyników.</p>"};
   }
   box.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const st=()=>box.querySelector("#pg_st");
-    try{if(b.dataset.pgn){st().textContent="Zapisuję kopię danych…";const g=await db.collection("podglad").doc(b.dataset.pgn).get();await podgladZapisz(db,b.dataset.pgn,g.exists?g.data():null,true);await rysuj("Podgląd nadany.")}
-     else if(b.dataset.pgo){st().textContent="Odświeżam…";const g=await db.collection("podglad").doc(b.dataset.pgo).get();await podgladZapisz(db,b.dataset.pgo,g.exists?g.data():null,true);await rysuj("Kopia odświeżona.")}
-     else if(b.dataset.pgu){const ref=db.collection("podglad").doc(b.dataset.pgu);const g=await ref.get();const n=(g.exists&&g.data().czesci)||0;await ref.delete();for(let i=0;i<n;i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).delete();await rysuj("Podgląd odebrany.")}}
+    try{if(b.dataset.pgn){const id=b.dataset.pgn;st().textContent="Zapisuję kopię danych…";await podgladKolejno(id,()=>podgladZapisz(db,id,true,true));await rysuj("Podgląd nadany.")}
+     else if(b.dataset.pgo){const id=b.dataset.pgo;st().textContent="Odświeżam…";const z=await podgladKolejno(id,()=>podgladZapisz(db,id,false,true));await rysuj(z?"Kopia odświeżona.":"Podgląd był już odebrany – nic nie odświeżono.")}
+     else if(b.dataset.pgu){const id=b.dataset.pgu;st().textContent="Odbieram podgląd…";await podgladKolejno(id,()=>podgladOdbierz(db,id));await rysuj("Podgląd odebrany.")}}
     catch(x){st().textContent="Błąd: "+(x&&x.message||x)}});
   await rysuj("");podgladOdswiezWszystkie(db).then(()=>rysuj(""))}
 /*PODGLAD-KONIEC*/
@@ -4868,8 +4894,8 @@ window.ZAPISWWW=async function(rec,st){
  try{const r=await fetch("zapis.json",{cache:"no-store"});if(r.ok)url=String((await r.json()).url||"")}catch(e){}
  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)){st.innerHTML="<span class=\"niezapis\"><b>Wynik nie zapisuje się automatycznie w tej wersji kursu. Pobierz protokół, podpisz go i oddaj prowadzącemu (T. Stuczyński) albo do działu BHP IUNG-PIB.</b></span>";return true}
  /*ZAPIS-WWW-PIN*/let kp=null;if(!(rec.pin_skrot&&/^[A-Z]{2,4}$/.test(String(rec.kod_osoby||""))))kp=await new Promise(ok=>{const f=document.createElement("span");
-  f.innerHTML='<br>Zapis w rejestrze wymaga kodu osoby i PIN-u nadanego przez prowadzącego. <label>Kod osoby (inicjały) <input id="zw_kod" size="5" autocomplete="off"></label> <label>PIN <input id="zw_pin" type="password" size="6" inputmode="numeric" autocomplete="off"></label> <button type="button" id="zw_ok">Zapisz wynik</button> <button type="button" id="zw_nie">Bez zapisu</button>';
-  st.appendChild(f);f.querySelector("#zw_ok").onclick=()=>{const k=f.querySelector("#zw_kod").value.trim().toUpperCase(),p=f.querySelector("#zw_pin").value.trim();f.remove();ok(k&&p?{k,p}:null)};f.querySelector("#zw_nie").onclick=()=>{f.remove();ok(null)}});
+  f.innerHTML='<br>Zapis w rejestrze wymaga kodu osoby i PIN-u nadanego przez prowadzącego. <label>Kod osoby (inicjały) <input id="zw_kod" size="5" autocomplete="off"></label> <label>PIN <input id="zw_pin" type="password" size="6" inputmode="text" autocapitalize="characters" autocomplete="off"></label> <button type="button" id="zw_ok">Zapisz wynik</button> <button type="button" id="zw_nie">Bez zapisu</button>';
+  st.appendChild(f);f.querySelector("#zw_ok").onclick=()=>{const k=f.querySelector("#zw_kod").value.trim().toUpperCase(),p=f.querySelector("#zw_pin").value.trim().toUpperCase();f.remove();ok(k&&p?{k,p}:null)};f.querySelector("#zw_nie").onclick=()=>{f.remove();ok(null)}});
  if(kp){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("CURL-PIN|"+kp.k+"|"+kp.p));window.ZAPIS_KOD=kp.k;rec=Object.assign({},rec,{kod_osoby:kp.k,pin_skrot:[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")})}
  else if(!rec.pin_skrot){st.textContent="Wynik nie został zapisany w rejestrze (brak kodu i PIN-u). Pobierz lub wydrukuj protokół i przekaż prowadzącemu.";return true}
  const body=JSON.stringify(Object.assign({},rec,{strona:location.origin+location.pathname,wyslano:new Date().toISOString()}));
@@ -4955,10 +4981,10 @@ window.SZK={"PROF": {}, "WYM": {"INSTR_OGOLNY": {"grupa": "wszyscy nowo zatrudni
    i uruchamia moduły prowadzącego. Pracownik ich nie dostaje. Generuje build_ochrona_kurs.py. */
 window.PRAC=window.PRAC||{pokazKarte(st){location.hash="#kartyryzyka";setTimeout(()=>{const el=document.getElementById("kr_"+st);if(!el)return;const d=el.closest("details");if(d)d.open=true;el.scrollIntoView({behavior:"smooth",block:"start"})},80)}};
 (function(){
-const SHA="a361453e2149ab43",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
+const SHA="ae4d29debe3f50d8",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
 const hx=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let PINH={};
-window.PINW=r=>{if(!r)return "";if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
+window.PINW=r=>{if(!r)return "";if(document.documentElement.classList.contains("tryb-podglad"))return r.pin_wynik!==undefined?r.pin_wynik+" (sprawdzone przy kopii)":(r.weryfikacja||"");if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
 async function shaT(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function wczytajPiny(){try{const db=await getDb();const g=await db.collection("piny").doc("aktualne").get();PINH=g.exists?(g.data()||{}):{}}catch(x){PINH={}}}
 function pinPanel(){const sec=document.getElementById("pracownicy");if(!sec||document.getElementById("pin_panel"))return;
@@ -4985,6 +5011,7 @@ async function go(){let u=null,adm=false;try{u=await getUser();adm=!!(u&&((await
   let d=null;try{const db=await getDb();const g=await db.collection("kurs_admin").doc("dane").get();if(g.exists)d=g.data()}catch(x){}
   if(!d){komunikat("Dane osób (archiwum, alerty, pracownicy) nie zostały wczytane z bazy kursu. Poproś Claude o zasilenie kolekcji kurs_admin.");return}
   if(d._sha!==SHA)komunikat("Uwaga: dane osób w bazie kursu są z innej wersji ("+(d._wersja||"?")+") niż ten plik – poproś Claude o ponowne zasilenie.");
+  try{const ga=await (await getDb()).collection("kurs_admin").doc("alerty").get();const va=ga.exists?ga.data():null;if(va&&typeof va.dane==="string"&&va.dane){JSON.parse(va.dane);d=Object.assign({},d,{[IDS.find(i=>/^alerty/.test(i))]:va.dane})}}catch(x){}
   IDS.forEach(i=>{const el=document.getElementById(i);if(el)el.textContent=d[i]||""});
   try{(JSON.parse(d.przeb0||"[]")).forEach(x=>PRZEB0.push(x))}catch(x){}
   await wczytajPiny();
