@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test negatywny kontroli odnośników (recenzja Copilota do PR #5, 15.11.2026): kontrola musi wykryć brakujący plik
+"""Test negatywny kontroli odnośników (recenzje Copilota do PR #5 i PR #7, 15.11.2026): kontrola musi wykryć brakujący plik
 w każdym z przypadków poniżej i przejść, gdy plik jest. Każdy przypadek w osobnym katalogu tymczasowym."""
 import os, subprocess, sys, tempfile
 K = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sprawdz_odnosniki.py')
@@ -10,6 +10,9 @@ PRZYPADKI = {
     'odnośnik bez cudzysłowów': ('<a href=sds/brak3.pdf>PDF</a>', 'sds/brak3.pdf'),
     'obraz bez cudzysłowów': ('<img src=obrazy/brak.png alt="">', 'obrazy/brak.png'),
     'arkusz stylów': ("<link rel=stylesheet href='styl/brak.css'>", 'styl/brak.css'),
+    'encja w nazwie pliku (jedno dekodowanie)': ('<a href="dok/a&amp;amp;b.pdf">x</a>', 'dok/a&amp;b.pdf'),
+    'procent w nazwie pliku (jedno dekodowanie)': ('<a href="dok/a%2520b.pdf">x</a>', 'dok/a%20b.pdf'),
+    'encja w odnośniku z tekstu skryptu': ('<script>el.innerHTML=\'<a href="wzory/c&amp;amp;d.docx">w</a>\'</script>', 'wzory/c&amp;d.docx'),
     'odnośnik w tekście skryptu': ('<script>el.innerHTML=\'<a href="wzory/brak.docx">wzór</a>\'</script>', 'wzory/brak.docx'),
 }
 bledy = 0
