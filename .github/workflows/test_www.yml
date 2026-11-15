@@ -17,6 +17,10 @@ jobs:
         run: sleep 90
       - name: Test strony na żywo (na gałęzi odbior-* sprawdza stronę już opublikowaną)
         run: node tests/test_www.js
+      - name: Test negatywny strony na żywo (z włączonym zapisem test MUSI dać BŁĄD)
+        run: |
+          if TRYB=negatywny node tests/test_www.js > neg.log; then echo "Test nie wykrył włączonego zapisu"; cat neg.log; exit 1; fi
+          grep -q '"WYNIK": "BŁĄD"' wynik_testu_negatywnego.json && grep -q 'TEST_NEGATYWNY' wynik_testu_negatywnego.json && echo "test negatywny strony: wykryto włączony zapis (POST zablokowany)"
       - name: Kontrola odnośników (pliki kart charakterystyki i inne odnośniki względne; audyt 15.11.2026 C-04)
         run: python3 tests/test_negatywny_odnosniki.py && python3 tests/sprawdz_odnosniki.py
       - name: Kontrola języka (ten sam sprawdzacz i ta sama lista co lokalnie; dec. 128)
@@ -27,5 +31,6 @@ jobs:
           name: wynik-testu-www
           path: |
             wynik_testu.json
+            wynik_testu_negatywnego.json
             teksty_www.json
             wynik_*.pdf

@@ -27,12 +27,13 @@ class Zbieracz(HTMLParser):
         if self._w_skrypcie: self.skrypty.append(d)
 
 z = Zbieracz(); z.feed(open(PLIK, encoding='utf8').read()); z.close()
+# parser HTML już zamienił encje (&amp; → &); tekstu skryptu parser nie dekoduje, więc tam encje zamieniamy raz tutaj
 surowe = list(z.cele)
 for s in z.skrypty:  # odnośniki zapisane w skryptach jako tekst HTML
-    surowe += [m.group(2) for m in re.finditer(r'''(?:href|src)=\\?(["'])(.*?)\\?\1''', s)]
+    surowe += [html.unescape(m.group(2)) for m in re.finditer(r'''(?:href|src)=\\?(["'])(.*?)\\?\1''', s)]
 cele = set()
 for a in surowe:
-    a = html.unescape(a.strip())
+    a = a.strip()
     if not a or POMIN.match(a) or '${' in a or re.search(r"['\"]\s*\+|\+\s*['\"]", a): continue  # składane w skrypcie z części
     a = a.split('#')[0].split('?')[0]
     if a: cele.add(unquote(a))
