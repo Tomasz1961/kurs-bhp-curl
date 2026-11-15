@@ -18,7 +18,7 @@ jobs:
       - name: Test strony na żywo (na gałęzi odbior-* sprawdza stronę już opublikowaną)
         run: node tests/test_www.js
       - name: Kontrola odnośników (pliki kart charakterystyki i inne odnośniki względne; audyt 15.11.2026 C-04)
-        run: python3 tests/sprawdz_odnosniki.py
+        run: python3 tests/test_negatywny_odnosniki.py && python3 tests/sprawdz_odnosniki.py
       - name: Kontrola języka (ten sam sprawdzacz i ta sama lista co lokalnie; dec. 128)
         run: node tests/render_zakladki.js "$PWD/index.html" teksty_www.json && python3 tests/sprawdz_jezyk.py teksty_www.json tests/jezyk_lista.json --pokaz
       - uses: actions/upload-artifact@v4
