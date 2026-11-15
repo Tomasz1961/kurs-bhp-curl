@@ -3177,7 +3177,7 @@ const DZIS=()=>new Date().toISOString().slice(0,10);
 const TYPY={MED_BADANIE:"badanie lekarskie – termin",MED_BRAK:"brak orzeczenia lekarskiego",BHP_OKRESOWE:"szkolenie okresowe BHP",BHP_WSTEPNE:"szkolenie wstępne BHP",UMOWA:"umowa o pracę – koniec",NARUSZENIE:"niezgodność do wyjaśnienia",DOWOD:"brak dokumentu potwierdzającego",AKT_PRZEGLAD:"przegląd przepisu",DOKUMENT:"dokument do sprawdzenia",CIAGLOSC:"ciągłość zatrudnienia",KARTA_DOSTAWY:"karta charakterystyki z dostawy",KARTA_PRZEGLAD:"przegląd karty charakterystyki",STATUS:"nieobecność bez wniosku",KARTA_CZASU:"karta czasu pracy",BHP_DATA:"szkolenie BHP – brak daty",BHP_ZALEGLOSC:"szkolenie BHP – zaległość",KARTA_BRAK:"brak karty charakterystyki",ZAPOZNANIE:"zapoznanie z dokumentem"};
 const MED=t=>/^MED_/.test(t);
 let orz=null,rola=false,gotowe=false,plik=null,odczyt=null;
-async function czyProwadzacy(){try{const u=await getUser();return !!(u&&((await u.isOwner())||(await u.canEdit())))}catch(x){return false}}
+async function czyProwadzacy(){try{const u=await getUser();return !!(u&&((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad())))}catch(x){return false}}
 async function wczytajOrz(){try{const db=await getDb();if(!db){orz=[];return}const q=await db.collection("orzeczenia").get();orz=q.docs.map(d=>({...d.data(),_id:d.id}))}catch(x){orz=orz||[]}}
 const poTerminie=a=>a.termin&&a.termin<DZIS();
 const blisko=a=>a.termin&&!poTerminie(a)&&(Date.parse(a.termin)-Date.parse(DZIS()))/864e5<=30;
@@ -3411,7 +3411,7 @@ window.DZ=(function(){let q=[],t=null,doc=null,busy=false;
     $("dz_lista").innerHTML=r.map(w=>`<tr><td>${e(new Date(w.t).toLocaleString("pl-PL",{dateStyle:"short",timeStyle:"medium"}))}</td><td>${e(N[w.u]||"konto bez nazwy")}</td><td>${e(w.a)}</td><td>${e(dzSz(w))}</td><td>${e(dzZak(w.h))}</td></tr>`).join("");
     $("dz_st").textContent=`Wpisów: ${W.length}; pokazano ${r.length}.`}
   async function show(){await flush();const st=$("dz_st");let u=null;try{u=await getUser()}catch(x){}
-    if(!u||!((await u.isOwner())||(await u.canEdit()))){st.textContent="Dziennik dostępu czytają wyłącznie prowadzący (pełny dostęp).";$("dz_lista").innerHTML="";return}
+    if(!u||!((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad()))){st.textContent="Dziennik dostępu czytają wyłącznie prowadzący (pełny dostęp).";$("dz_lista").innerHTML="";return}
     try{const db=await getDb();const g=await db.collection("dziennik").get();W=[];const ids=[];
       g.docs.forEach(d=>{ids.push(d.id);(d.data().wpisy||[]).forEach(w=>W.push({...w,u:d.id}))});W.sort((x,y)=>y.t<x.t?-1:1);
       try{const p=ids.length?await u.profiles(ids):{};N={};ids.forEach(i=>N[i]=(p[i]&&p[i].name)||"konto bez nazwy nr "+(ids.indexOf(i)+1))}catch(x){}
@@ -3603,7 +3603,7 @@ return {pokaz,karty,drukKarta,D,badStan,badCell,badBox};
 </div>
 </div>
 
-<!--WERSJA-START--><div id="kurs_wersja_stopka" style="text-align:center;font-size:12px;opacity:.7;padding:14px 8px">Kurs BHP CURL – wersja v13.39 z 15.11.2026</div><!--WERSJA-KONIEC-->
+<!--WERSJA-START--><div id="kurs_wersja_stopka" style="text-align:center;font-size:12px;opacity:.7;padding:14px 8px">Kurs BHP CURL – wersja v13.40 z 15.11.2026</div><!--WERSJA-KONIEC-->
 <div id="printarea" aria-hidden="true"></div>
 <script>
 /* ---------- people (codes = register adm.sqlite) ---------- */
@@ -4539,7 +4539,7 @@ const DOC_CSS=`.pdoc{font:10.5pt/1.35 Arial,Helvetica,sans-serif;color:#000;back
 .pdoc .fr6 th,.pdoc .fr6 td{font-size:7.5pt;padding:2px 3px}
 .pdoc .hdr{margin-bottom:8px}
 .pdoc .hdr th,.pdoc .hdr td{font-size:8.5pt}`;
-function fullDoc(title,body){return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4;margin:14mm}body{margin:0;background:#fff}${DOC_CSS}</style></head><body>${body}</body></html>`}
+function fullDoc(title,body){return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4;margin:14mm}body{margin:0;background:#fff}${DOC_CSS}</style><style>/*PODGLAD-CSS*/.tryb-podglad #pin_panel,.tryb-podglad #podglad_panel,.tryb-podglad #terminy_panel{display:none!important}</style></head><body>${body}</body></html>`}
 function printNow(body){const pa=document.getElementById("printarea");pa.innerHTML=body;try{window.print()}catch(e){}}
 let dlP=null;function getDl(){if(!dlP)dlP=window.claude?.use?window.claude.use("downloads"):Promise.resolve(null);return dlP}
 async function saveFile(name,data,stEl){
@@ -4570,7 +4570,56 @@ async function initLogin(){
 
 /* ---------- storage (db capability) ---------- */
 let dbP=null,userP=null;
-function getDb(){if(!dbP)dbP=window.claude?.use?window.claude.use("db"):Promise.resolve(null);return dbP}
+/*PODGLAD-START*/function getDbReal(){if(!dbP)dbP=window.claude?.use?window.claude.use("db"):Promise.resolve(null);return dbP}
+const PODGLAD_KOL=["wyniki","przebieg","przyjecia","karta_ryzyka_podpis","orzeczenia","kurs_admin","karty_czasu","karty_czasu_wynik","dziennik"];
+const PODGLAD_MAX=180000;let podgladP=null;
+function podgladBaner(t){let b=document.getElementById("podglad_baner");if(!b){const m=document.querySelector("main")||document.body;b=document.createElement("p");b.id="podglad_baner";b.setAttribute("role","status");b.style.cssText="background:#1f4e79;color:#fff;padding:8px 12px;margin:0 0 8px;border-radius:6px";m.insertBefore(b,m.firstChild)}b.textContent=t}
+function podgladShim(S,real,mojeId){const odmowa=()=>{podgladBaner("Zmiana odrzucona: tryb podglądu. Zmiany wprowadza wyłącznie T. Stuczyński.");return Promise.reject(Object.assign(new Error("Tryb podglądu – zmiany wprowadza wyłącznie T. Stuczyński."),{code:"podglad"}))};
+ const sd=(id,d)=>({id,exists:d!==undefined&&d!==null,data:()=>d===null?undefined:d,metadata:{fromCache:true,hasPendingWrites:false}});
+ const dref=(kol,id)=>{if(kol==="dziennik"&&id===mojeId&&real)return real.collection("dziennik").doc(id);return{id,path:kol+"/"+id,get:async()=>sd(id,(S[kol]||{})[id]),set:odmowa,update:odmowa,delete:odmowa,onSnapshot:n=>{n(sd(id,(S[kol]||{})[id]));return()=>{}},collection:p=>cref(kol+"/"+id+"/"+p)}};
+ const qs=kol=>{const o=S[kol]||{};const docs=Object.keys(o).map(i=>sd(i,o[i]));return{docs,size:docs.length,empty:!docs.length,docChanges:()=>docs.map((d,i)=>({type:"added",doc:d,oldIndex:-1,newIndex:i})),forEach:f=>docs.forEach(f)}};
+ const cref=kol=>({id:kol.split("/").pop(),path:kol,get:async()=>qs(kol),doc:id=>dref(kol,id),add:odmowa,where:()=>{throw new Error("podgląd: where nieobsługiwane")},orderBy:()=>{throw new Error("podgląd: orderBy nieobsługiwane")},limit:()=>cref(kol),onSnapshot:n=>{n(qs(kol));return()=>{}}});
+ return{collection:p=>cref(p),doc:p=>{const s=p.split("/");return dref(s.slice(0,-1).join("/"),s[s.length-1])},PODGLAD:true}}
+function czyPodglad(){if(!podgladP)podgladP=(async()=>{try{const u=await getUser();if(!u)return null;if((await u.isOwner())||(await u.canEdit()))return null;
+  const real=await getDbReal();const id=await u.id();if(!real||!id)return null;const m=await real.collection("podglad").doc(id).get();if(!m.exists)return null;
+  const meta=m.data()||{};const cz=await real.collection("podglad").doc(id).collection("k").get();const S={};const czesci={};
+  cz.docs.forEach(d=>{const x=d.data()||{};(x.rek||[]).forEach(r=>{if(r.klucz!==undefined){const k=r.kol+"/"+r.id;(czesci[k]=czesci[k]||{})[r.klucz]=r.d}else (S[r.kol]=S[r.kol]||{})[r.id]=r.d})});
+  Object.keys(czesci).forEach(k=>{const i=k.indexOf("/");const kol=k.slice(0,i),did=k.slice(i+1);(S[kol]=S[kol]||{})[did]=czesci[k]});
+  document.documentElement.classList.add("tryb-podglad");
+  const kiedy=meta.odswiezono?new Date(meta.odswiezono).toLocaleString("pl-PL"):"?";
+  const pokaz=()=>podgladBaner("Tryb podglądu (bez zmian). Dane prowadzącego z "+kiedy+". Zmiany wprowadza wyłącznie T. Stuczyński.");
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",pokaz);else pokaz();
+  return{db:podgladShim(S,real,id),meta}}catch(x){return null}})();return podgladP}
+async function getDb(){const real=await getDbReal();const p=await czyPodglad();return p?p.db:real}
+/* właściciel: kopia danych dla osób z podglądem */
+async function podgladRekordy(db){const rek=[];for(const kol of PODGLAD_KOL){let q;try{q=await db.collection(kol).get()}catch(x){continue}
+  for(const d of q.docs){const v=d.data();if(v===undefined)continue;const s=JSON.stringify(v);if(s.length<=PODGLAD_MAX)rek.push({kol,id:d.id,d:v});else Object.keys(v).forEach(k=>rek.push({kol,id:d.id,klucz:k,d:v[k]}))}}return rek}
+function podgladCzesci(rek){const cz=[];let cur=[],n=0;for(const r of rek){const s=JSON.stringify(r).length;if(s>PODGLAD_MAX*1.3)throw new Error("podgląd: zapis "+r.kol+"/"+r.id+(r.klucz?"/"+r.klucz:"")+" za duży ("+s+" B)");if(n+s>PODGLAD_MAX&&cur.length){cz.push(cur);cur=[];n=0}cur.push(r);n+=s}if(cur.length)cz.push(cur);return cz}
+async function podgladSha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+async function podgladZapisz(db,id,stary,wymus){const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
+  const cz=podgladCzesci(rek);const ref=db.collection("podglad").doc(id);for(let i=0;i<cz.length;i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).set({rek:cz[i]});
+  for(let i=cz.length;i<((stary&&stary.czesci)||0);i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).delete();
+  await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"});return true}
+async function podgladOdswiezWszystkie(db){try{const q=await db.collection("podglad").get();for(const d of q.docs){const v=d.data();if(v)await podgladZapisz(db,d.id,v,false)}}catch(x){}}
+async function podgladPanel(){const sec=document.getElementById("pracownicy");if(!sec||document.getElementById("podglad_panel"))return;const db=await getDbReal();let u=null;try{u=await getUser()}catch(x){}if(!db||!u)return;
+  const box=document.createElement("div");box.id="podglad_panel";box.className="prose";box.style.cssText="border:2px solid #1f4e79;border-radius:8px;padding:10px 14px;margin:12px 0";
+  const pin=document.getElementById("pin_panel");if(pin)pin.after(box);else sec.prepend(box);
+  const E=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  async function rysuj(msg){let lista=[];try{lista=(await db.collection("podglad").get()).docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))}catch(x){}
+    let prof={};try{prof=await u.profiles(lista.map(x=>x.id))}catch(x){}
+    box.innerHTML=`<h3>Podgląd całości bez prawa zmian (decyzja T. Stuczyńskiego z 15.11.2026)</h3><p>Osoba z podglądem widzi zakładki prowadzącego (alerty, pracownicy, rejestry, dziennik) bez możliwości zmian; PIN-ów nie widzi. Udostępnij jej kurs jako „Viewer” albo „Contributor”, nie „Editor”. Kopia danych odświeża się przy każdym Twoim wejściu.</p>
+    <p><label>Szukaj osoby <input id="pg_q" autocomplete="off"></label> <button type="button" id="pg_szukaj">Szukaj</button></p><div id="pg_wyniki"></div>
+    <table><tr><th>Osoba</th><th>Nadano</th><th>Dane z</th><th></th></tr>${lista.map(x=>`<tr><td>${E((prof[x.id]&&prof[x.id].name)||"(konto "+x.id.slice(0,6)+"…)")}</td><td>${E((x.nadano||"").slice(0,16).replace("T"," "))}</td><td>${E((x.odswiezono||"").slice(0,16).replace("T"," "))}</td><td><button type="button" data-pgo="${E(x.id)}">Odśwież</button> <button type="button" data-pgu="${E(x.id)}">Odbierz podgląd</button></td></tr>`).join("")||'<tr><td colspan="4">Nikt nie ma podglądu.</td></tr>'}</table><p id="pg_st">${E(msg||"")}</p>`;
+    box.querySelector("#pg_szukaj").onclick=async()=>{const q=box.querySelector("#pg_q").value.trim();let hits=[];try{hits=await u.search(q)}catch(x){}
+      box.querySelector("#pg_wyniki").innerHTML=hits.filter(h=>!h.isMe).map(h=>`<p>${E(h.name||"(bez nazwy)")} <button type="button" data-pgn="${E(h.id)}">Nadaj podgląd</button></p>`).join("")||"<p>Brak wyników.</p>"};
+  }
+  box.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const st=()=>box.querySelector("#pg_st");
+    try{if(b.dataset.pgn){st().textContent="Zapisuję kopię danych…";const g=await db.collection("podglad").doc(b.dataset.pgn).get();await podgladZapisz(db,b.dataset.pgn,g.exists?g.data():null,true);await rysuj("Podgląd nadany.")}
+     else if(b.dataset.pgo){st().textContent="Odświeżam…";const g=await db.collection("podglad").doc(b.dataset.pgo).get();await podgladZapisz(db,b.dataset.pgo,g.exists?g.data():null,true);await rysuj("Kopia odświeżona.")}
+     else if(b.dataset.pgu){const ref=db.collection("podglad").doc(b.dataset.pgu);const g=await ref.get();const n=(g.exists&&g.data().czesci)||0;await ref.delete();for(let i=0;i<n;i++)await ref.collection("k").doc("c"+String(i).padStart(3,"0")).delete();await rysuj("Podgląd odebrany.")}}
+    catch(x){st().textContent="Błąd: "+(x&&x.message||x)}});
+  await rysuj("");podgladOdswiezWszystkie(db).then(()=>rysuj(""))}
+/*PODGLAD-KONIEC*/
 function getUser(){if(!userP)userP=window.claude?.use?window.claude.use("user"):Promise.resolve(null);return userP}
 async function saveResult(rec){
   const st=document.getElementById("savestatus");
@@ -4609,7 +4658,7 @@ document.getElementById("printrep").addEventListener("click",()=>{if(needRows())
 document.getElementById("dlrep").addEventListener("click",()=>{if(needRows())saveFile(`Raport_szkolenia_BHP_QMS-FR-006_${fileStamp()}.html`,fullDoc("Raport szkolenia BHP",reportHtml(regRows,regNames)),cst())});
 document.getElementById("printall").addEventListener("click",()=>{if(needRows())printNow(latestPerPerson(regRows).map(r=>protoHtml(r,regNames[r.konto])).join('<div class="pbreak"></div>'))});
 document.querySelector("#regtable tbody").addEventListener("click",e=>{const c=e.target.closest("[data-c]");if(c&&window.DOK){DOK.out(DOK.certyfikat(regRows[+c.dataset.c]));return}const b=e.target.closest("[data-p]");if(b)printNow(protoHtml(regRows[+b.dataset.p],regNames[regRows[+b.dataset.p].konto]))});
-async function initRole(){try{const u=await getUser();if(u&&((await u.isOwner())||(await u.canEdit()))){showRegister=true;buildNav();route()}}catch(e){}}
+async function initRole(){try{const u=await getUser();if(u&&((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad()))){showRegister=true;buildNav();route()}}catch(e){}}
 
 /*CZAS-START*/
 const CZAS_KEY="bhp_czas_v1";let CZAS={};try{CZAS=JSON.parse(localStorage.getItem(CZAS_KEY)||"{}")}catch(e){CZAS={}}
@@ -4696,7 +4745,7 @@ const SESJA=(()=>{
   }
   function lockDate(){const t=document.getElementById("tdate");if(!t)return;if(!owner){t.value=new Date().toISOString().slice(0,10);t.readOnly=true;t.title="Datę testu może zmienić tylko prowadzący."}else{t.readOnly=false;t.title=""}}
   async function init(){ui();lockDate();
-    try{const u=await getUser();owner=u?((await u.isOwner())||(await u.canEdit())):false}catch(e){owner=false}
+    try{const u=await getUser();owner=u?((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad())):false}catch(e){owner=false}
     lockDate();document.getElementById("formalbl").hidden=!owner;document.getElementById("pinlbl").hidden=true;
     if(owner){msg("Jesteś prowadzącym: wybierasz osobę i formę sesji, PIN nie jest potrzebny. Datę możesz ustawić na rzeczywisty dzień szkolenia.","pinok");PANEL.init()}}
   return {init,forma:()=>owner?document.getElementById("sesjaforma").value:"e-learning + test online",
@@ -4931,7 +4980,7 @@ window.MOJE=function(proby){const st=document.getElementById("savestatus");if(!s
   const karta=r=>String(r.answers||"").split(" ").filter(Boolean).map((x,i)=>{const [id,l]=x.split(":");const q=QBY[id];if(!q)return "";const g="abc".indexOf(l);const ok=g===q.k;return `<tr><td>${i+1}</td><td>${hx(q.q)}</td><td>${hx(q.a[g]??"–")}</td><td>${ok?"✓":"✗ "+hx(q.a[q.k])}</td></tr>`}).join("");
   el.innerHTML=`<summary>Twoje podejścia do testów (${p.length})</summary><table><thead><tr><th>Data i godzina</th><th>Test</th><th>Podejście</th><th>Wynik</th><th>Ocena</th><th>Czas testu</th></tr></thead><tbody>${p.map(r=>`<tr><td>${godz(r)}</td><td>${hx(r.temat||r.rodzaj)}</td><td>${hx(r.proba)}</td><td>${hx(r.wynik)}</td><td>${hx(r.ocena)}</td><td>${hx(r.czas_min||"?")} min</td></tr><tr><td colspan="6"><details><summary>Karta odpowiedzi (dobrze / źle)</summary><table><thead><tr><th>Nr</th><th>Pytanie</th><th>Twoja odpowiedź</th><th>Ocena</th></tr></thead><tbody>${karta(r)}</tbody></table></details></td></tr>`).join("")}</tbody></table>`};
 function komunikat(t){const m=document.getElementById("main");if(!m)return;const d=document.createElement("p");d.className="note";d.style.cssText="background:#c0392b;color:#fff;padding:8px 12px";d.textContent=t;m.insertBefore(d,m.firstChild)}
-async function go(){let u=null,adm=false;try{u=await getUser();adm=!!(u&&((await u.isOwner())||(await u.canEdit())))}catch(x){}
+async function go(){let u=null,adm=false;try{u=await getUser();adm=!!(u&&((await u.isOwner())||(await u.canEdit())||!!(await czyPodglad())))}catch(x){}
   if(!adm){try{const db=await getDb();if(db&&u){const g=await db.collection("wyniki").doc(await u.id()).get();if(g.exists&&(g.data().proby||[]).length)MOJE(g.data().proby)}}catch(x){}return}
   let d=null;try{const db=await getDb();const g=await db.collection("kurs_admin").doc("dane").get();if(g.exists)d=g.data()}catch(x){}
   if(!d){komunikat("Dane osób (archiwum, alerty, pracownicy) nie zostały wczytane z bazy kursu. Poproś Claude o zasilenie kolekcji kurs_admin.");return}
@@ -4941,7 +4990,7 @@ async function go(){let u=null,adm=false;try{u=await getUser();adm=!!(u&&((await
   await wczytajPiny();
   document.querySelectorAll('script[type="text/x-admin"]').forEach(sc=>{const n=document.createElement("script");n.textContent=sc.textContent;sc.after(n)});
   window.KURS_ADMIN_OK=true;if(typeof route==="function")route();
-  let wl=false;try{wl=await u.isOwner()}catch(x){}if(wl)pinPanel()}
+  let wl=false;try{wl=await u.isOwner()}catch(x){}if(wl){pinPanel();podgladPanel()}}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",go);else setTimeout(go,0);
 })();
 </script>
