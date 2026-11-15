@@ -1,7 +1,7 @@
 // Renderuje każdą zakładkę kursu (tryb prowadzącego z paczki ZIP) i zapisuje widoczny tekst do JSON.
 // Także: (a) każdy wybór z list rozwijanych w zakładce (np. Teczka – każda osoba): klucz "<zakładka>#<lista>=<wartość>";
 //        (b) każdy wydruk (printNow przechwycony, okno druku nie otwiera się): przyciski „Drukuj/Wydruk/do druku/Draft/Pusty test/…”,
-//            przyciski z listy DRUK_ID i z atrybutem data-jg / data-jgr (testy działu BHP); klucz "<zakładka>~druk<n>";
+//            przyciski z listy DRUK_ID, z data-a z listy DRUK_A i z atrybutem data-jg / data-jgr (testy działu BHP); klucz "<zakładka>~druk<n>";
 //        (c) wydruki powtarzane dla każdego wyboru z listy rozwijanej: klucz "<zakładka>#<lista>=<wartość>~druk<n>" (recenzja PR #2, 15.11.2026).
 // Użycie: node render_zakladki.js <plik html> <wyjście json>
 const {chromium}=require('playwright');const fs=require('fs');(async()=>{const b=await chromium.launch();const p=await b.newPage();const bledy=[];p.on('pageerror',e=>bledy.push(String(e.message).slice(0,200)));
@@ -12,7 +12,8 @@ await p.evaluate(()=>{window.__druki=[];const op=window.print;window.print=funct
   const pa=document.getElementById('printarea');window.__druki.push('<div>'+(pa?pa.innerHTML:'')+'</div>')};
   window.open=function(){return {document:{write:h=>window.__druki.push(String(h||'')),close(){}},close(){},focus(){},print(){}}};
   const DRUK_ID=new Set(['kt-druk','kt-draft','kt-pusty','dokall','dokppoz','doklista']);
-  window.__czyDruk=b=>!!b.offsetParent&&(DRUK_ID.has(b.id)||b.hasAttribute('data-jg')||b.hasAttribute('data-jgr')||/drukuj|wydruk|do druku|draft|pusty test|oświadczenie|lista obecności|z kluczem|czysty/i.test(b.innerText||''))});
+  const DRUK_A=new Set(['cert','druk','jg','kdr','kklucz','komplet','karta','ktest','praktJ','praktS','proto','skw','test','wpis','zasw','zdr']);// data-a tworzące wydruk (recenzja PR #3); bez kpok, przeslij i pobrań plików
+  window.__czyDruk=b=>!!b.offsetParent&&(DRUK_ID.has(b.id)||DRUK_A.has(b.dataset&&b.dataset.a)||b.hasAttribute('data-jg')||b.hasAttribute('data-jgr')||/drukuj|wydruk|do druku|draft|pusty test|oświadczenie|lista obecności|z kluczem|czysty/i.test(b.innerText||''))});
 const ids=await p.evaluate(()=>[...document.querySelectorAll('section[id]')].map(s=>s.id));
 const out={_nawigacja:await p.evaluate(()=>[...document.querySelectorAll('nav a, nav button')].map(a=>a.innerText.trim()).filter(Boolean).join('\n')),
  _poczatek:await p.evaluate(()=>location.hash+'\n'+document.body.innerText.slice(0,1500))};
