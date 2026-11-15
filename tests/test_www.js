@@ -26,7 +26,7 @@ const {chromium}=require('playwright');const fs=require('fs');
  if(await pg.$('#zw_ok')){W.formularz_pin_wypelniony=true;await pg.fill('#zw_kod','TS');await pg.fill('#zw_pin','000000');await pg.click('#zw_ok');await pg.waitForFunction(()=>window.__zapisGotowy,null,{timeout:30000}).catch(()=>{W.zapis_bez_konca=true})}
  W.pola_pin_lub_kodu=await pg.$$eval('#zw_pin, #zw_kod, #sk_pin, #sk_kod, input[type=password]',x=>x.filter(e=>!e.closest('[hidden]')&&e.type!=='hidden').length);
  for(const a of ['zbhp','zqms']){const [d]=await Promise.all([pg.waitForEvent('download',{timeout:NEG?8000:60000}).catch(()=>null),pg.click(`#zasw_po button[data-a="${a}"]`,{force:true,timeout:10000}).catch(()=>null)]);
-  if(d){const p='wynik_'+a+'.pdf';await d.saveAs(p);const t=fs.readFileSync(p);W[a]={plik:d.suggestedFilename(),bajty:t.length,pdf:t.slice(0,5).toString()==='%PDF-'}}else W[a]=null}
+  if(d){const p='wynik_'+(NEG?'negatywny_':'')+a+'.pdf';await d.saveAs(p);const t=fs.readFileSync(p);W[a]={plik:d.suggestedFilename(),bajty:t.length,pdf:t.slice(0,5).toString()==='%PDF-'}}else W[a]=null}
  W.przycisk_przeslij=await pg.$$eval('button[data-a="przeslij"]',x=>x.length);
  // pola przesyłania pliku i PIN-u, które odwiedzający może zobaczyć: każda zakładka z menu i każda sekcja strony (także usunięte z menu) wywołana adresem
  const zakladki=await pg.$$eval('#nav a[href^="#"], main section[id]',x=>x.map(a=>a.tagName==='A'?a.getAttribute('href'):'#'+a.id));W.zakladki_sprawdzone=0;W.widoczne_pola_przesylania=[];
