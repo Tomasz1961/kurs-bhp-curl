@@ -3,7 +3,7 @@
 // strony: saveResult → ZAPISWWW (pobiera zapis.json) → ZASWPO, z prawdziwym zapis.json z serwera. Każde żądanie POST jest
 // blokowane przed wysłaniem i liczone. Wynik OK tylko, gdy: ścieżka zapisu skończyła się stanem „bez zapisu” (element .niezapis
 // w polu statusu), nie pojawiło się pole PIN ani kodu osoby, nie było żadnego POST, oba zaświadczenia pobierają się jako PDF,
-// w żadnej zakładce (także wywołanej adresem) nie widać pola przesyłania pliku ani PIN-u, nie ma przycisku przesyłania skanu
+// w żadnej zakładce i sekcji (także wywołanej adresem) nie widać pola przesyłania pliku ani PIN-u, nie ma przycisku przesyłania skanu
 // i nie ma błędów skryptu.
 // TRYB=negatywny: zapis.json zostaje podmieniony na poprawny adres aplikacji zapisu (jak po ponownym włączeniu zapisu);
 // test MUSI wtedy dać BŁĄD (sprawdza to krok w Actions).
@@ -17,18 +17,20 @@ const {chromium}=require('playwright');const fs=require('fs');
  await pg.evaluate(()=>{const t=document.getElementById('test');t.hidden=false;t.style.display='block'});
  W.sciezka_zapisu=await pg.evaluate(()=>typeof saveResult==='function'&&typeof window.ZAPISWWW==='function');
  await pg.evaluate(()=>{let d=document.getElementById('savestatus');if(!d){d=document.createElement('p');d.id='savestatus';document.body.appendChild(d)}d.innerHTML='';
-  window.__zapis=saveResult({zaliczony:1,kod_osoby:'UCZ',uczestnik:'Test Automatyczny',data:'2026-11-14',rodzaj:'BHP_okresowe',punkty:8,liczba_pytan:8,procent:100,answers:'',temat:'Test BHP – pracownicy'})});
- await pg.waitForTimeout(4000);
+  window.__zapisGotowy=false;window.__zapis=saveResult({zaliczony:1,kod_osoby:'UCZ',uczestnik:'Test Automatyczny',data:'2026-11-14',rodzaj:'BHP_okresowe',punkty:8,liczba_pytan:8,procent:100,answers:'',temat:'Test BHP – pracownicy'})});
+ // czekamy na koniec operacji zapisu (albo na formularz PIN, który ją wstrzymuje), nie na stały czas
+ await pg.evaluate(()=>{window.__zapis.then(()=>{window.__zapisGotowy=true},()=>{window.__zapisGotowy=true})});
+ await pg.waitForFunction(()=>window.__zapisGotowy||document.getElementById('zw_ok'),null,{timeout:30000});
  W.stan_bez_zapisu=await pg.$$eval('#savestatus .niezapis',x=>x.length);
  // gdyby strona poprosiła o kod i PIN, test je wpisuje, żeby sprawdzić, czy wynik poszedłby żądaniem POST (blokowanym wyżej)
- if(await pg.$('#zw_ok')){W.formularz_pin_wypelniony=true;await pg.fill('#zw_kod','TS');await pg.fill('#zw_pin','000000');await pg.click('#zw_ok');await pg.waitForTimeout(3000)}
+ if(await pg.$('#zw_ok')){W.formularz_pin_wypelniony=true;await pg.fill('#zw_kod','TS');await pg.fill('#zw_pin','000000');await pg.click('#zw_ok');await pg.waitForFunction(()=>window.__zapisGotowy,null,{timeout:30000}).catch(()=>{W.zapis_bez_konca=true})}
  W.pola_pin_lub_kodu=await pg.$$eval('#zw_pin, #zw_kod, #sk_pin, #sk_kod, input[type=password]',x=>x.filter(e=>!e.closest('[hidden]')&&e.type!=='hidden').length);
  for(const a of ['zbhp','zqms']){const [d]=await Promise.all([pg.waitForEvent('download',{timeout:NEG?8000:60000}).catch(()=>null),pg.click(`#zasw_po button[data-a="${a}"]`,{force:true,timeout:10000}).catch(()=>null)]);
   if(d){const p='wynik_'+a+'.pdf';await d.saveAs(p);const t=fs.readFileSync(p);W[a]={plik:d.suggestedFilename(),bajty:t.length,pdf:t.slice(0,5).toString()==='%PDF-'}}else W[a]=null}
  W.przycisk_przeslij=await pg.$$eval('button[data-a="przeslij"]',x=>x.length);
- // pola przesyłania pliku i PIN-u, które odwiedzający może zobaczyć: każda zakładka z menu oraz zakładki prowadzącego wywołane adresem
- const zakladki=await pg.$$eval('#nav a[href^="#"]',x=>x.map(a=>a.getAttribute('href')));W.zakladki_sprawdzone=0;W.widoczne_pola_przesylania=[];
- for(const z of [...new Set([...zakladki,'#alerty','#kcz','#panel','#rejestr','#pracownicy'])]){await pg.evaluate(h=>{location.hash=h},z);await pg.waitForTimeout(150);W.zakladki_sprawdzone++;
+ // pola przesyłania pliku i PIN-u, które odwiedzający może zobaczyć: każda zakładka z menu i każda sekcja strony (także usunięte z menu) wywołana adresem
+ const zakladki=await pg.$$eval('#nav a[href^="#"], main section[id]',x=>x.map(a=>a.tagName==='A'?a.getAttribute('href'):'#'+a.id));W.zakladki_sprawdzone=0;W.widoczne_pola_przesylania=[];
+ for(const z of [...new Set(zakladki)]){await pg.evaluate(h=>{location.hash=h},z);await pg.waitForTimeout(150);W.zakladki_sprawdzone++;
   const w=await pg.$$eval('input[type=file], #zw_pin, #sk_pin, input[type=password]',x=>x.filter(e=>e.type!=='hidden'&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').map(e=>e.id||e.name||e.type));
   for(const i of w)W.widoczne_pola_przesylania.push(z+':'+i)}
  W.pole_pliku_skanu=W.widoczne_pola_przesylania.length;
