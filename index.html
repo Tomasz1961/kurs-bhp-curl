@@ -4605,7 +4605,9 @@ async function getDb(){const real=await getDbReal();const p=await czyPodglad();r
 /* właściciel: kopia danych dla osób z podglądem */
 function podgladBezPin(v){if(Array.isArray(v))return v.map(podgladBezPin);if(v&&typeof v==="object"){const o={};for(const k of Object.keys(v))if(k!=="pin_skrot"&&k!=="pin_wynik")o[k]=podgladBezPin(v[k]);
   if(v.pin_skrot)o.pin_wynik=window.PINW?String(PINW(v)):"weryfikacja PIN-u niedostępna";return o}return v}
-async function podgladRekordy(db){if(typeof wczytajPiny==="function")await wczytajPiny();const rek=[];
+async function podgladRekordy(db){/* świeży odczyt PIN-ów (także zmienionych w innym oknie); bez niego kopia nie powstaje */
+  if(typeof window.wczytajPinyScisle!=="function")throw new Error("brak odczytu PIN-ów – kopia nie została zmieniona");
+  try{await window.wczytajPinyScisle()}catch(x){throw new Error("nie udało się odczytać PIN-ów – kopia nie została zmieniona")}const rek=[];
   for(const kol of PODGLAD_KOL){let q;try{q=await db.collection(kol).get()}catch(x){throw new Error("nie udało się odczytać „"+kol+"” – kopia nie została zmieniona")}
   for(const d of q.docs){let v=d.data();if(v===undefined)continue;v=podgladBezPin(v);if(JSON.stringify(v).length<=PODGLAD_MAX){rek.push({kol,id:d.id,d:v});continue}
     for(const k of Object.keys(v)){const x=v[k];if(!Array.isArray(x)||(JSON.stringify(x)||"").length<=PODGLAD_MAX){rek.push({kol,id:d.id,klucz:k,d:x});continue}
@@ -4613,38 +4615,51 @@ async function podgladRekordy(db){if(typeof wczytajPiny==="function")await wczyt
       rek.push({kol,id:d.id,klucz:k,seg:i++,d:s})}}}return rek}
 function podgladCzesci(rek){const cz=[];let cur=[],n=0;for(const r of rek){const s=JSON.stringify(r).length;if(s>PODGLAD_MAX*1.3)throw new Error("podgląd: zapis "+r.kol+"/"+r.id+(r.klucz?"/"+r.klucz:"")+" za duży ("+s+" B)");if(n+s>PODGLAD_MAX&&cur.length){cz.push(cur);cur=[];n=0}cur.push(r);n+=s}if(cur.length)cz.push(cur);return cz}
 async function podgladSha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-/* operacje na podglądzie jednej osoby idą po kolei (odebranie czeka na trwające odświeżenie) */
+/* operacje na podglądzie jednej osoby idą po kolei: w tym oknie kolejka, między oknami blokada w bazie (acquire na podglad/<id>/zamek/z);
+   odebranie i odświeżenie tej samej osoby nigdy nie biegną równocześnie, także z dwóch okien prowadzącego */
+const PODGLAD_OKNO=Math.random().toString(36).slice(2)+Date.now().toString(36);
 function podgladKolejno(id,f){const p=(podgladKolejka[id]||Promise.resolve()).catch(()=>{}).then(f);podgladKolejka[id]=p;return p}
-async function podgladUsunCzesci(ref,zostaw){const q=await ref.collection("k").get();for(const d of q.docs)if(!zostaw||!d.id.startsWith(zostaw+"_c"))await ref.collection("k").doc(d.id).delete()}
-async function podgladZapisz(db,id,nowe,wymus){const ref=db.collection("podglad").doc(id);const g=await ref.get();const stary=g.exists?(g.data()||{}):null;
+async function podgladZamek(db,id,f){const z=db.collection("podglad").doc(id).collection("zamek").doc("z");const koniec=Date.now()+150000;
+  for(;;){const r=await z.acquire({holder:PODGLAD_OKNO,ttlMs:120000});if(r&&r.acquired)break;
+    if(Date.now()>koniec)throw new Error("podgląd tej osoby zmienia teraz inne okno – spróbuj za chwilę");
+    const w=r&&r.expiresAt?Math.min(1000,Math.max(200,Date.parse(r.expiresAt)-Date.now())):1000;await new Promise(t=>setTimeout(t,w))}
+  const odnow=async()=>{const r=await z.acquire({holder:PODGLAD_OKNO,ttlMs:120000});if(!r||!r.acquired)throw new Error("utracono blokadę podglądu – kopia nie została zmieniona")};
+  try{return await f(odnow)}finally{try{await z.acquire({holder:PODGLAD_OKNO,ttlMs:1000})}catch(x){}}}
+/* usuwa części jednej generacji ("" = części bez generacji, c000…) albo – przy odebraniu – wszystkie */
+async function podgladUsunGen(ref,gen){const q=await ref.collection("k").get();for(const d of q.docs)if(gen===null||(gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id)))await ref.collection("k").doc(d.id).delete()}
+async function podgladZapisz(db,id,nowe,wymus){return podgladZamek(db,id,async odnow=>{const ref=db.collection("podglad").doc(id);const g=await ref.get();const stary=g.exists?(g.data()||{}):null;
   if(!nowe&&!stary)return false;/* odświeżenie po odebraniu podglądu: nic nie robić */
   const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
   const cz=podgladCzesci(rek);const gen=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  for(let i=0;i<cz.length;i++)await ref.collection("k").doc(podgladNazwa(gen,i)).set({rek:cz[i]});
-  const teraz=await ref.get();const tm=teraz.exists?(teraz.data()||{}):null;
-  if(stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!nowe){await podgladUsunCzesci(ref,null).catch(()=>{});if(!tm)return false;throw new Error("podgląd zmieniony w innym oknie – odśwież stronę")}
-  await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"});
-  await podgladUsunCzesci(ref,gen);return true}
-async function podgladOdbierz(db,id){const ref=db.collection("podglad").doc(id);await ref.delete();await podgladUsunCzesci(ref,null)}
-async function podgladOdswiezWszystkie(db){let q;try{q=await db.collection("podglad").get()}catch(x){return}for(const d of q.docs)await podgladKolejno(d.id,()=>podgladZapisz(db,d.id,false,false)).catch(()=>{})}
+  try{for(let i=0;i<cz.length;i++){await odnow();await ref.collection("k").doc(podgladNazwa(gen,i)).set({rek:cz[i]})}
+    await odnow();const teraz=await ref.get();const tm=teraz.exists?(teraz.data()||{}):null;
+    if(stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!!tm){await podgladUsunGen(ref,gen).catch(()=>{});if(!tm&&stary)return false;throw new Error("podgląd zmieniony poza blokadą – odśwież stronę")}
+    await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y"})}
+  catch(x){await podgladUsunGen(ref,gen).catch(()=>{});throw x}
+  if(stary)await podgladUsunGen(ref,stary.gen||"").catch(()=>{});return true})}
+async function podgladOdbierz(db,id){return podgladZamek(db,id,async()=>{const ref=db.collection("podglad").doc(id);await ref.delete();await podgladUsunGen(ref,null)})}
+/* odświeżenie przy wejściu prowadzącego: błąd jednej osoby nie zatrzymuje innych; zwraca listę błędów do stałego komunikatu w panelu */
+async function podgladOdswiezWszystkie(db){const bl=[];let q;try{q=await db.collection("podglad").get()}catch(x){return[{id:"",blad:"nie udało się odczytać listy podglądów"}]}
+  for(const d of q.docs){try{await podgladKolejno(d.id,()=>podgladZapisz(db,d.id,false,false))}catch(x){bl.push({id:d.id,blad:String(x&&x.message||x)})}}return bl}
 async function podgladPanel(){const sec=document.getElementById("pracownicy");if(!sec||document.getElementById("podglad_panel"))return;const db=await getDbReal();let u=null;try{u=await getUser()}catch(x){}if(!db||!u)return;
   const box=document.createElement("div");box.id="podglad_panel";box.className="prose";box.style.cssText="border:2px solid #1f4e79;border-radius:8px;padding:10px 14px;margin:12px 0";
   const pin=document.getElementById("pin_panel");if(pin)pin.after(box);else sec.prepend(box);
   const E=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  let bledyAuto=[];
   async function rysuj(msg){let lista=[];try{lista=(await db.collection("podglad").get()).docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))}catch(x){}
     let prof={};try{prof=await u.profiles(lista.map(x=>x.id))}catch(x){}
     box.innerHTML=`<h3>Podgląd całości bez prawa zmian (decyzja T. Stuczyńskiego z 15.11.2026)</h3><p>Osoba z podglądem widzi zakładki prowadzącego (alerty, pracownicy, rejestry, dziennik) bez możliwości zmian; PIN-ów nie widzi. Udostępnij jej kurs jako „Viewer” albo „Contributor”, nie „Editor”. Kopia danych odświeża się przy każdym Twoim wejściu.</p>
     <p><label>Szukaj osoby <input id="pg_q" autocomplete="off"></label> <button type="button" id="pg_szukaj">Szukaj</button></p><div id="pg_wyniki"></div>
-    <table><tr><th>Osoba</th><th>Nadano</th><th>Dane z</th><th></th></tr>${lista.map(x=>`<tr><td>${E((prof[x.id]&&prof[x.id].name)||"(konto "+x.id.slice(0,6)+"…)")}</td><td>${E((x.nadano||"").slice(0,16).replace("T"," "))}</td><td>${E((x.odswiezono||"").slice(0,16).replace("T"," "))}</td><td><button type="button" data-pgo="${E(x.id)}">Odśwież</button> <button type="button" data-pgu="${E(x.id)}">Odbierz podgląd</button></td></tr>`).join("")||'<tr><td colspan="4">Nikt nie ma podglądu.</td></tr>'}</table><p id="pg_st">${E(msg||"")}</p>`;
+    <table><tr><th>Osoba</th><th>Nadano</th><th>Dane z</th><th></th></tr>${lista.map(x=>`<tr><td>${E((prof[x.id]&&prof[x.id].name)||"(konto "+x.id.slice(0,6)+"…)")}</td><td>${E((x.nadano||"").slice(0,16).replace("T"," "))}</td><td>${E((x.odswiezono||"").slice(0,16).replace("T"," "))}</td><td><button type="button" data-pgo="${E(x.id)}">Odśwież</button> <button type="button" data-pgu="${E(x.id)}">Odbierz podgląd</button></td></tr>`).join("")||'<tr><td colspan="4">Nikt nie ma podglądu.</td></tr>'}</table><p id="pg_st">${E(msg||"")}</p>${bledyAuto.length?`<p id="pg_auto" role="alert" style="background:#fde8e8;border:1px solid #b00;padding:6px 10px">Automatyczne odświeżenie kopii nie powiodło się – kopia jest nieaktualna dla: ${bledyAuto.map(b=>E(b.id?((prof[b.id]&&prof[b.id].name)||"konto "+b.id.slice(0,6)+"…"):"wszystkich osób")+" ("+E(b.blad)+")").join("; ")}. Użyj przycisku „Odśwież”.</p>`:""}`;
     box.querySelector("#pg_szukaj").onclick=async()=>{const q=box.querySelector("#pg_q").value.trim();let hits=[];try{hits=await u.search(q)}catch(x){}
       box.querySelector("#pg_wyniki").innerHTML=hits.filter(h=>!h.isMe).map(h=>`<p>${E(h.name||"(bez nazwy)")} <button type="button" data-pgn="${E(h.id)}">Nadaj podgląd</button></p>`).join("")||"<p>Brak wyników.</p>"};
   }
   box.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const st=()=>box.querySelector("#pg_st");
     try{if(b.dataset.pgn){const id=b.dataset.pgn;st().textContent="Zapisuję kopię danych…";await podgladKolejno(id,()=>podgladZapisz(db,id,true,true));await rysuj("Podgląd nadany.")}
-     else if(b.dataset.pgo){const id=b.dataset.pgo;st().textContent="Odświeżam…";const z=await podgladKolejno(id,()=>podgladZapisz(db,id,false,true));await rysuj(z?"Kopia odświeżona.":"Podgląd był już odebrany – nic nie odświeżono.")}
-     else if(b.dataset.pgu){const id=b.dataset.pgu;st().textContent="Odbieram podgląd…";await podgladKolejno(id,()=>podgladOdbierz(db,id));await rysuj("Podgląd odebrany.")}}
+     else if(b.dataset.pgo){const id=b.dataset.pgo;st().textContent="Odświeżam…";const z=await podgladKolejno(id,()=>podgladZapisz(db,id,false,true));bledyAuto=bledyAuto.filter(b=>b.id!==id&&b.id);await rysuj(z?"Kopia odświeżona.":"Podgląd był już odebrany – nic nie odświeżono.")}
+     else if(b.dataset.pgu){const id=b.dataset.pgu;st().textContent="Odbieram podgląd…";await podgladKolejno(id,()=>podgladOdbierz(db,id));bledyAuto=bledyAuto.filter(b=>b.id!==id);await rysuj("Podgląd odebrany.")}}
     catch(x){st().textContent="Błąd: "+(x&&x.message||x)}});
-  await rysuj("");podgladOdswiezWszystkie(db).then(()=>rysuj(""))}
+  await rysuj("");podgladOdswiezWszystkie(db).then(b=>{bledyAuto=b;return rysuj("")})}
 /*PODGLAD-KONIEC*/
 function getUser(){if(!userP)userP=window.claude?.use?window.claude.use("user"):Promise.resolve(null);return userP}
 async function saveResult(rec){
@@ -4987,6 +5002,7 @@ let PINH={};
 window.PINW=r=>{if(!r)return "";if(document.documentElement.classList.contains("tryb-podglad"))return r.pin_wynik!==undefined?r.pin_wynik+" (sprawdzone przy kopii)":(r.weryfikacja||"");if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
 async function shaT(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function wczytajPiny(){try{const db=await getDb();const g=await db.collection("piny").doc("aktualne").get();PINH=g.exists?(g.data()||{}):{}}catch(x){PINH={}}}
+window.wczytajPiny=wczytajPiny;window.wczytajPinyScisle=async()=>{const db=await getDbReal();const g=await db.collection("piny").doc("aktualne").get();PINH=g.exists?(g.data()||{}):{}};
 function pinPanel(){const sec=document.getElementById("pracownicy");if(!sec||document.getElementById("pin_panel"))return;
   const box=document.createElement("div");box.id="pin_panel";box.className="prose";box.style.cssText="border:2px solid #2f6b3a;border-radius:8px;padding:10px 14px;margin:12px 0";
   const mh=sec.querySelector(".mhead");(mh||sec.firstChild).after?(mh?mh.after(box):sec.prepend(box)):sec.prepend(box);rysujPiny()}
