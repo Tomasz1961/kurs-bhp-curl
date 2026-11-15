@@ -15,7 +15,7 @@ jobs:
       - name: Czekaj na wdrożenie Pages
         if: github.ref == 'refs/heads/main'
         run: sleep 90
-      - if: github.ref == 'refs/heads/main'
+      - name: Test strony na żywo (na gałęzi odbior-* sprawdza stronę już opublikowaną)
         run: node tests/test_www.js
       - name: Kontrola odnośników (pliki kart charakterystyki i inne odnośniki względne; audyt 15.11.2026 C-04)
         run: python3 tests/sprawdz_odnosniki.py
