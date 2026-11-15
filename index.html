@@ -4586,11 +4586,13 @@ function podgladShim(S,real,mojeId){const odmowa=()=>{podgladBaner("Zmiana odrzu
  const cref=kol=>({id:kol.split("/").pop(),path:kol,get:async()=>qs(kol),doc:id=>dref(kol,id),add:odmowa,where:()=>{throw new Error("podgląd: where nieobsługiwane")},orderBy:()=>{throw new Error("podgląd: orderBy nieobsługiwane")},limit:()=>cref(kol),onSnapshot:n=>{n(qs(kol));return()=>{}}});
  return{collection:p=>cref(p),doc:p=>{const s=p.split("/");return dref(s.slice(0,-1).join("/"),s[s.length-1])},PODGLAD:true}}
 /* części kopii jednej generacji: <gen>_c000…; meta.gen wskazuje generację opublikowaną dopiero po zapisaniu wszystkich jej części */
-/* odebranie zostawia znacznik podglad/<id>/odwolanie/o z numerem blokady (wersja dokumentu blokady rośnie przy każdym jej przejęciu);
-   kopia ważna tylko, gdy jej numer jest większy – spóźniony zapis okna zatrzymanego dłużej niż blokada nie przywraca odebranego podglądu */
+/* odebranie jest logiczne: zapis niezmiennego znacznika podglad/<id>/odwolanie/e<numer blokady> (wersja dokumentu blokady rośnie przy każdym
+   przejęciu); kopia ważna tylko, gdy jej numer jest większy od NAJWIĘKSZEGO znacznika. Spóźniony zapis (kopii albo znacznika) okna zatrzymanego
+   dłużej niż blokada nie przywraca odebranego podglądu i nie obniża znacznika. Dokument meta nie jest usuwany (usunięcie mogłoby trafić w nowsze
+   nadanie); usuwane są tylko części generacji odebranej kopii – nowsze nadanie ma zawsze inną generację. */
 const PODGLAD_FORMAT="podglad-2";
-async function podgladOdwolany(ref,meta){const o=await ref.collection("odwolanie").doc("o").get();if(!o.exists)return false;const e=Number((o.data()||{}).epoka);
-  return !(Number(meta&&meta.epoka)>e)}
+async function podgladOdwolany(ref,meta){const q=await ref.collection("odwolanie").get();let e=0;for(const d of q.docs){const v=Number((d.data()||{}).epoka);if(v>e)e=v}
+  if(!e)return false;return !(Number(meta&&meta.epoka)>e)}
 function podgladBezPinWyniku(v){if(Array.isArray(v))return v.map(podgladBezPinWyniku);if(v&&typeof v==="object"){const o={};for(const k of Object.keys(v))if(k!=="pin_wynik"&&k!=="pin_skrot")o[k]=podgladBezPinWyniku(v[k]);return o}return v}
 function podgladNazwa(gen,i){return(gen?gen+"_":"")+"c"+String(i).padStart(3,"0")}
 function podgladZloz(meta,docs){const gen=meta.gen||"";const n=meta.czesci||0;const moje=docs.filter(d=>gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id));
@@ -4641,17 +4643,19 @@ async function podgladZamek(db,id,f){const z=db.collection("podglad").doc(id).co
 async function podgladUsunGen(ref,gen){const q=await ref.collection("k").get();for(const d of q.docs)if(gen===null||(gen?d.id.startsWith(gen+"_c"):/^c\d{3}$/.test(d.id)))await ref.collection("k").doc(d.id).delete()}
 async function podgladZapisz(db,id,nowe,wymus){return podgladZamek(db,id,async(odnow,epoka)=>{const ref=db.collection("podglad").doc(id);const g=await ref.get();let stary=g.exists?(g.data()||{}):null;
   /* kopia zapisana po odebraniu (spóźnione okno): nie jest podglądem – usunąć ją, nie odświeżać */
-  if(stary&&await podgladOdwolany(ref,stary)){await ref.delete();await podgladUsunGen(ref,null);stary=null}
+  if(stary&&await podgladOdwolany(ref,stary)){await podgladUsunGen(ref,stary.gen||"");stary=null}
   if(!nowe&&!stary)return false;/* odświeżenie po odebraniu podglądu: nic nie robić */
   const rek=await podgladRekordy(db);const sha=await podgladSha(JSON.stringify(rek));if(!wymus&&stary&&stary.sha===sha)return false;
   const cz=podgladCzesci(rek);const gen=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   try{for(let i=0;i<cz.length;i++){await odnow();await ref.collection("k").doc(podgladNazwa(gen,i)).set({rek:cz[i]})}
-    await odnow();const teraz=await ref.get();const tm=teraz.exists?(teraz.data()||{}):null;
+    await odnow();const teraz=await ref.get();let tm=teraz.exists?(teraz.data()||{}):null;if(tm&&await podgladOdwolany(ref,tm))tm=null;/* odebrana kopia = brak kopii */
     if((stary?!(tm&&(tm.gen||"")===(stary.gen||"")):!!tm)||await podgladOdwolany(ref,{epoka})){await podgladUsunGen(ref,gen).catch(()=>{});if(!tm&&stary)return false;throw new Error("podgląd zmieniony poza blokadą – odśwież stronę")}
     await ref.set({nadano:(stary&&stary.nadano)||new Date().toISOString(),odswiezono:new Date().toISOString(),sha,gen,czesci:cz.length,rekordow:rek.length,bez:"PIN-y",epoka,format:PODGLAD_FORMAT})}
   catch(x){await podgladUsunGen(ref,gen).catch(()=>{});throw x}
   if(stary)await podgladUsunGen(ref,stary.gen||"").catch(()=>{});return true})}
-async function podgladOdbierz(db,id){return podgladZamek(db,id,async(odnow,epoka)=>{const ref=db.collection("podglad").doc(id);await ref.collection("odwolanie").doc("o").set({epoka,odebrano:new Date().toISOString()});await ref.delete();await podgladUsunGen(ref,null)})}
+async function podgladOdbierz(db,id){return podgladZamek(db,id,async(odnow,epoka)=>{const ref=db.collection("podglad").doc(id);
+  await ref.collection("odwolanie").doc("e"+epoka).set({epoka,odebrano:new Date().toISOString()});
+  const g=await ref.get();const m=g.exists?(g.data()||{}):null;if(m&&!(Number(m.epoka)>epoka))await podgladUsunGen(ref,m.gen||"")})}
 /* odświeżenie przy wejściu prowadzącego: błąd jednej osoby nie zatrzymuje innych; zwraca listę błędów do stałego komunikatu w panelu */
 async function podgladOdswiezWszystkie(db){const bl=[];let q;try{q=await db.collection("podglad").get()}catch(x){return[{id:"",blad:"nie udało się odczytać listy podglądów"}]}
   for(const d of q.docs){try{await podgladKolejno(d.id,()=>podgladZapisz(db,d.id,false,false))}catch(x){bl.push({id:d.id,blad:String(x&&x.message||x)})}}return bl}
@@ -4660,7 +4664,8 @@ async function podgladPanel(){const sec=document.getElementById("pracownicy");if
   const pin=document.getElementById("pin_panel");if(pin)pin.after(box);else sec.prepend(box);
   const E=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   let bledyAuto=[];
-  async function rysuj(msg){let lista=[];try{lista=(await db.collection("podglad").get()).docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))}catch(x){}
+  async function rysuj(msg){let lista=[];try{lista=(await db.collection("podglad").get()).docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));
+      const ods=[];for(const x of lista){let o=true;try{o=await podgladOdwolany(db.collection("podglad").doc(x.id),x)}catch(e){}if(!o)ods.push(x)}lista=ods}catch(x){}
     let prof={};try{prof=await u.profiles(lista.map(x=>x.id))}catch(x){}
     box.innerHTML=`<h3>Podgląd całości bez prawa zmian (decyzja T. Stuczyńskiego z 15.11.2026)</h3><p>Osoba z podglądem widzi zakładki prowadzącego (alerty, pracownicy, rejestry, dziennik) bez możliwości zmian; PIN-ów nie widzi. Udostępnij jej kurs jako „Viewer” albo „Contributor”, nie „Editor”. Kopia danych odświeża się przy każdym Twoim wejściu.</p>
     <p><label>Szukaj osoby <input id="pg_q" autocomplete="off"></label> <button type="button" id="pg_szukaj">Szukaj</button></p><div id="pg_wyniki"></div>
