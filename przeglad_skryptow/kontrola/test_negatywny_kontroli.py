@@ -127,6 +127,12 @@ def main():
                 z = sqlite3.connect(f'file:{B}/bhp_rejestr.sqlite?mode=ro', uri=True); m = sqlite3.connect(':memory:'); z.backup(m); z.close()
                 m.execute("insert into gpt_inwentarz(id, status) values('TEST-NEGATYWNY-BEZ-DECYZJI', 'BEZ DECYZJI')")
                 sposob = 'dopisany element GPT bez decyzji (stan „BEZ DECYZJI”)'; ok = spelnia((m.execute(wyr).fetchone() or [0])[0] or 0, ocz)
+            elif typ == 'sql_bhp' and pol == 'D-143' and 'from ilustracja' in wyr and not wymaga_tresci(ocz):
+                # D-143: dopisana ilustracja ze stanem wpisanym ręcznie („w kursie”) i oznaczona jako poza wydaniem (wiersz pusty nie ma stanu – nic by nie sprawdził)
+                z = sqlite3.connect(f'file:{B}/bhp_rejestr.sqlite?mode=ro', uri=True); m = sqlite3.connect(':memory:'); z.backup(m); z.close()
+                m.execute("insert into ilustracja(id, status) values('TEST-NEGATYWNY-ILUSTRACJA', 'w kursie')")
+                m.execute("insert or replace into obraz_poza_wydaniem(ident, fragment, sha256, data, aktualne) values('TEST-NEGATYWNY-ILUSTRACJA', 'x', 'x', 'x', 1)")
+                sposob = 'dopisana ilustracja ze stanem „w kursie” wpisanym ręcznie, oznaczona jako poza wydaniem'; ok = spelnia((m.execute(wyr).fetchone() or [0])[0] or 0, ocz)
             elif typ in ('sql_bhp', 'inwentarz', 'sql_adm') and not wymaga_tresci(ocz) and spelnia(1, ocz) is False:
                 src = f'file:{B}/bhp_rejestr.sqlite?mode=ro' if typ != 'sql_adm' else 'file:/mnt/project-files/adm/adm.sqlite?mode=ro'
                 r = wiersz_pusty(src, wyr.replace('{kurs_sha}', 'x'))
@@ -140,6 +146,10 @@ def main():
                 import glob; ok = spelnia(len(glob.glob(os.path.join(pusty, wyr), recursive=True)), ocz)
             elif typ == 'admin' and wymaga_tresci(ocz):
                 sposob = 'pusty plik danych prowadzącego'; ok = False
+            elif typ == 'admin':
+                s_ = doslownie(wyr)
+                if s_ is not None:
+                    sposob = 'do danych prowadzącego wstawiony niedozwolony tekst zbudowany z wzorca'; ok = spelnia(len(re.findall(wyr, ' ' + s_ + ' ')), ocz)
             elif typ == 'skrypt':
                 for k, t in SKRYPT_TEST.items():
                     if k in wyr: sposob = 'test wbudowany w skrypt: ' + t; ok = False; break

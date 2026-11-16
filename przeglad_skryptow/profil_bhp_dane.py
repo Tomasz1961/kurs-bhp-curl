@@ -413,3 +413,10 @@ TABELE['obraz_poza_wydaniem'] = ('BHP-MAT', 'dane', 'Miejsca z obrazem wyłączo
 POLA.setdefault('fragment', 'fragment strony usunięty z wydania razem z obrazem (do przywrócenia po przyjęciu poprawionego obrazu)')
 POLA.setdefault('aktualne', '1 – miejsce jest teraz poza wydaniem (znacznik w kursie), 0 – obraz wrócił do kursu')
 TABELE['gpt_dostawa_1116b_odbior'] = ('BHP-MAT', 'dane', 'Odbiór 10 poprawionych rysunków dostarczonych 16.11.2026 ok. 14:21 (odbiór wykonuje Claude, polecenie TS 16.11.2026 14:40): plik, skrót SHA-256, skrót zastępowanego pliku z paczki 11:18, wynik, ocena, poprawka do odesłania ChatGPT, czy rysunek jest w kursie.')
+# 16.11.2026 wieczór – kroki 11zz10 i 11zz11 (decyzje TS 150 i 153)
+TABELE['kurs_fragment_usuniety'] = ('BHP-SYS', 'historia', 'Fragmenty kursu usunięte z wydania (listy braków niepokazywane działowi BHP, decyzja TS 153): krok, który je usunął, pełny usunięty fragment, powód i data; tekst wraca tylko decyzją.')
+TABELE['obraz_objasnienie'] = ('BHP-MAT', 'kontrola', 'Każda plansza w modułach kursu: moduł, oznaczenie, czy ma widoczne objaśnienie „dobrze / źle / dlaczego” (decyzja TS 150), źródło tekstu objaśnienia i stan (objaśniona albo do opracowania).')
+for _p, _o in {'krok': 'krok budowy kursu, który usunął fragment', 'fragment': 'usunięty fragment strony', 'powod': 'powód usunięcia z decyzją TS',
+               'sekcja': 'moduł (zakładka) kursu', 'ma_dobrze_zle_widoczne': 'czy objaśnienie dobrze/źle jest widoczne w podpisie (1 = tak)',
+               'zrodlo': 'źródło tekstu objaśnienia (opis planszy, tabela objaśnień z cytatem z modułu, podpis)', 'stan': 'stan objaśnienia (OBJAŚNIONA albo DO OPRACOWANIA)'}.items():
+    POLA.setdefault(_p, _o)

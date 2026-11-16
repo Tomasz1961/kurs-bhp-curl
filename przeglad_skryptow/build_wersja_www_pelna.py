@@ -43,6 +43,9 @@ if TRYB == 'pelny':
         _raw = open(f"{_DA}/{_pl[_fr]['plik']}", 'rb').read()
         assert hashlib.sha256(_raw).hexdigest() == _pl[_fr]['sha256'] and len(_raw) == _pl[_fr]['bajtow'], f'STOP: fragment {_fr} niezgodny z MANIFEST'
         _t = _raw.decode('utf8')
+        # dec. TS 146 (opis planu bez dopisków wewnętrznych) i 153 (bez list braków dla działu BHP) – STOP budowy strony
+        _zak = re.findall(r'zmniejszon|zatwierdzon\w* przez|Braki w rejestrze|brak karty – do uzupełnienia', _t)
+        assert not _zak, f'STOP D-146/D-153: fragment {_fr} zawiera {sorted(set(_zak))}'
         for _b64 in re.findall(r'src="data:image/[a-z+]+;base64,([^"]+)"', _t):
             _sh = hashlib.sha256(base64.b64decode(_b64)).hexdigest()
             assert _rej.execute("select count(*) from obraz_uzycie where sha256_w_stronie=? and stan='DOPUSZCZONY' and strona like 'kurs%'", (_sh,)).fetchone()[0] >= 1, f'STOP D-134: obraz {_sh[:12]} w fragmencie {_fr} nie jest dopuszczony w kursie'
