@@ -5116,7 +5116,7 @@ window.SZK={"PROF": {}, "WYM": {"INSTR_OGOLNY": {"grupa": "wszyscy nowo zatrudni
    i uruchamia moduły prowadzącego. Pracownik ich nie dostaje. Generuje build_ochrona_kurs.py. */
 window.PRAC=window.PRAC||{pokazKarte(st){location.hash="#kartyryzyka";setTimeout(()=>{const el=document.getElementById("kr_"+st);if(!el)return;const d=el.closest("details");if(d)d.open=true;el.scrollIntoView({behavior:"smooth",block:"start"})},80)}};
 (function(){
-const SHA="fa9f93c81b52a997",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
+const SHA="62e89720db213a9a",IDS=["prac-data", "alerty-data", "kpod-data", "dok-data", "kcz-data", "dos-data"];
 const hx=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let PINH={};
 window.PINW=r=>{if(!r)return "";if(document.documentElement.classList.contains("tryb-podglad")){if(document.documentElement.dataset.podgladPin!=="1")return "weryfikacja PIN-u niedostępna do odświeżenia kopii przez prowadzącego";return r.pin_wynik!==undefined?r.pin_wynik+" (sprawdzone przy kopii)":(r.weryfikacja||"")}if(r.pin_skrot){const h=PINH[r.kod_osoby];if(!h)return "PIN nie nadany – wynik niepotwierdzony";return r.pin_skrot===h.sha?"PIN zgodny ✓":"PIN NIEZGODNY – wynik niepotwierdzony"}return r.weryfikacja||""};
