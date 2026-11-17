@@ -131,6 +131,7 @@ def main():
                 # D-150: dopisana plansza z „Dobrze”, bez „Dlaczego”, w stanie DO OPRACOWANIA (wiersz pusty nie ma stanu – nic by nie sprawdził)
                 z = sqlite3.connect(f'file:{B}/bhp_rejestr.sqlite?mode=ro', uri=True); m = sqlite3.connect(':memory:'); z.backup(m); z.close()
                 m.execute("insert into obraz_objasnienie(sekcja, ident, ma_dobrze_zle_widoczne, zrodlo, stan, dobrze, zle, dlaczego) values('m0', 'TEST-NEGATYWNY', 1, 'x', 'DO OPRACOWANIA – brak „dlaczego”', 'x', 'x', '')")
+                m.execute("update obraz_objasnienie set podpis='Właściwie: x Niewłaściwie: y' where ident='TEST-NEGATYWNY'")
                 sposob = 'dopisana plansza „Dobrze/Źle” bez „Dlaczego”'; ok = spelnia((m.execute(wyr).fetchone() or [0])[0] or 0, ocz)
             elif typ == 'sql_bhp' and pol == 'D-143' and 'from ilustracja' in wyr and not wymaga_tresci(ocz):
                 # D-143: dopisana ilustracja ze stanem wpisanym ręcznie („w kursie”) i oznaczona jako poza wydaniem (wiersz pusty nie ma stanu – nic by nie sprawdził)

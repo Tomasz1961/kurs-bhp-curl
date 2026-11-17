@@ -61,9 +61,9 @@ for w in open(TSV, encoding='utf-8').read().rstrip('\n').split('\n')[1:]:
 # oznaczenie rysunku z rejestru obrazów (po skrócie obrazu) – klucz tabeli objaśnień dla plansz bez atrybutu data-* („m9:SCHEMAT_store”)
 _rj = sqlite3.connect(f'file:{os.environ.get("BHP_DB", B + "/bhp_rejestr.sqlite")}?mode=ro', uri=True)
 RYS = {sh: idt for idt, sh in _rj.execute("select ident, sha256_w_stronie from obraz_uzycie where strona like 'kurs%'")}; _rj.close()
-n7 = 0
+n7 = 0; n8 = 0
 def zamien(m):
-    global n2, n5, n6, n7
+    global n2, n5, n6, n7, n8
     f = m.group(0); sc = sekcja(m.start())
     ident = (re.search(r'data-(?:v2|gd|ident|img|id)="([^"]+)"', f) or re.search(r'id="([^"]+)"', f))
     ident = ident.group(1) if ident else f'{sc}#{m.start()}'
@@ -95,7 +95,16 @@ def zamien(m):
             ma = len(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.search(r'<figcaption[^>]*>(.*?)</figcaption>', f, re.S).group(1))).strip()) >= 60
             zr = 'instrukcja krok po kroku – objaśnienie w podpisie' if ma else 'brak objaśnienia w kursie'
         else: zr = 'brak tekstu dobrze/źle w kursie'
-    else: zr = 'podpis'
+    else:
+        zr = 'podpis'
+        # starsze podpisy „Właściwie: … Niewłaściwie: …” bez objaśnienia: ta sama treść jako „Dobrze / Źle” (uwaga Copilota do PR #17)
+        if cap and 'class="dz"' not in f:
+            c1 = cap.group(1)
+            g = re.search(r'(?:Właściwie|Prawidłowo|Dobrze)\s*:\s*(.+?)\s*(?:Niewłaściwie|Błędnie|Źle)\s*:\s*(.+?)(?=\s*<span|\s*$)', c1, re.S)
+            if g:
+                c2 = (c1[:g.start()].rstrip() + ' ' + c1[g.end():].strip()).rstrip()
+                c2 += f' <span class="dz"><b>Dobrze:</b> {g.group(1).strip()} <b>Źle:</b> {g.group(2).strip()}</span>'
+                f = f[:cap.start(1)] + c2 + f[cap.end(1):]; n8 += 1
     # „Dlaczego” do istniejącego objaśnienia „Dobrze/Źle” (z tabeli objaśnień, cytat sprawdzony z modułem; uwaga Copilota do PR #16)
     dzm0 = re.search(r'<span class="dz">(.*?)</span>', f, re.S)
     if dzm0 and 'Dlaczego:' not in dzm0.group(1) and '<b>Źle:</b>' in dzm0.group(1) and klucz in OBJ:
@@ -143,4 +152,4 @@ if len(sys.argv) <= 1:
     c.execute("update decyzja_ts set wdrozenie='krok 11zz11 build_objasnienia_rysunkow_1116.py (dobrze/źle z treści planszy do podpisu; tabela obraz_objasnienie); kontrola D-150' where id=150")
     c.commit(); c.close()
 print(f'11zz11 objaśnienia rysunków: dopiski usunięte {n1 + n1b} | dobrze/źle dodane {n2} | „do przeglądu” usunięte {n3} | m12 przeniesiony {n4} '
-      f'| z tabeli objaśnień {n5} | instrukcje {n6} | „dlaczego” dopisane {n7} | plansze w modułach {len(rej)}, z widocznym dobrze/źle {sum(r[2] for r in rej)}')
+      f'| z tabeli objaśnień {n5} | instrukcje {n6} | „dlaczego” dopisane {n7} | podpisy Właściwie/Niewłaściwie {n8} | plansze w modułach {len(rej)}, z widocznym dobrze/źle {sum(r[2] for r in rej)}')

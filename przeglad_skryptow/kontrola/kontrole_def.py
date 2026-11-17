@@ -386,6 +386,7 @@ K = [
 ('D-149', 'html', r'Plansza szkoleniowa, sprawdzona|Pytanie scenariuszowe, do przeglądu', '=0', 'bez wewnętrznych dopisków kontrolnych w podpisach rysunków i objaśnieniach odpowiedzi (TS 16.11.2026 20:12)'),
 ('D-150', 'sql_bhp', "select count(*) from obraz_objasnienie where ma_dobrze_zle_widoczne=1 and stan='OBJAŚNIONA'", '>=71', 'plansze w modułach i w zakładce ŚOI z widocznym objaśnieniem (z treści kursu) (TS 16.11.2026 20:12)'),
 ('D-150', 'sql_bhp', "select count(*) from obraz_objasnienie where stan<>'OBJAŚNIONA' or (dobrze<>'' and dlaczego='')", '=0', 'każda plansza „Dobrze/Źle” ma też „Dlaczego” (cytat z modułu sprawdzony); brak = DO OPRACOWANIA (uwaga Copilota do PR #16)'),
+('D-150', 'sql_bhp', "select count(*) from obraz_objasnienie where podpis like '%Niewłaściwie:%' or podpis like '%Błędnie:%'", '=0', 'porównanie „dobrze / źle” w polach objaśnienia, nie w samym podpisie (uwaga Copilota do PR #17)'),
 ('D-150', 'html', r'(?s)<section id="rejestr"[^>]*>(?:(?!</section>).)*PLANSZE-V2-m12', '=0', 'plansza modułu 12 w module 12, nie w zakładce „rejestr”'),
 ('D-153', 'html', r'Braki w rejestrze|brak karty – do uzupełnienia', '=0', 'listy braków poza kursem i poza /pelny/ – panel wewnętrzny z osobnym hasłem (TS 16.11.2026 20:21)'),
 ('D-153', 'html', r'<h3>Braki</h3>|p\.braki\.length', '=0', 'zakładka „Pracownicy” bez listy „Braki” i bez licznika braków (uwaga Copilota do PR #16)'),
