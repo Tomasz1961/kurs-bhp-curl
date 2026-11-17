@@ -138,6 +138,7 @@ assert s.count(STYL) == 1 and s.find(STYL) < 400, 'STOP 11zz11: styl objaśnień
 if s != s0: open(P, 'w', encoding='utf-8').write(s)
 if len(sys.argv) <= 1:
     c = sqlite3.connect(os.environ.get('BHP_DB', f'{B}/bhp_rejestr.sqlite'))
+    c.execute('begin')   # usunięcie, odtworzenie i wypełnienie tabeli oraz widoku w jednej transakcji (uwaga Copilota do PR #17)
     c.execute('drop view if exists v_obraz_objasnienie'); c.execute('drop table if exists obraz_objasnienie')
     c.execute('''create table obraz_objasnienie(sekcja text, ident text, ma_dobrze_zle_widoczne integer, zrodlo text, stan text,
                  sha256_obrazu text, podpis text, dobrze text, zle text, dlaczego text, jak_postepowac text, primary key(sekcja, ident))''')

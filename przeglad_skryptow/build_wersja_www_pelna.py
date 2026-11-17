@@ -87,6 +87,14 @@ _pd = _dane.get('prac-data'); _pds = isinstance(_pd, str); _pd = json.loads(_pd)
 if _pd:
     for _o in _pd.get('ludzie', []): _o['braki'] = []
     _dane['prac-data'] = json.dumps(_pd, ensure_ascii=False) if _pds else _pd
+# dec. TS 153: bazowe sprawy do załatwienia (alerty-data: braki kart, badań, dokumentów) też nie idą na www – listy puste (uwaga Copilota do PR #17)
+_ad = _dane.get('alerty-data'); _ads = isinstance(_ad, str); _ad = json.loads(_ad) if _ads else _ad
+if isinstance(_ad, dict):
+    _ad = {k: ([] if isinstance(v, list) else {} if isinstance(v, dict) else v) for k, v in _ad.items()}
+    _dane['alerty-data'] = json.dumps(_ad, ensure_ascii=False) if _ads else _ad
+_ad2 = _dane.get('alerty-data'); _ad2 = json.loads(_ad2) if isinstance(_ad2, str) else _ad2
+assert not (_ad2 or {}).get('alerty') and not any(isinstance(v, (list, dict)) and v for v in (_ad2 or {}).values()), 'STOP D-153: alerty z brakami w danych www'
+assert all(not o.get('braki') for o in ((json.loads(_dane['prac-data']) if isinstance(_dane.get('prac-data'), str) else _dane.get('prac-data')) or {}).get('ludzie', [])), 'STOP D-153: braki osób w danych www'
 assert not os.environ.get('ALERTY_WWW'), 'STOP D-153: sprawy do załatwienia (braki) nie idą na stronę www'
 _rek = [{'kol': 'kurs_admin', 'id': 'dane', 'd': _dane}]
 if os.environ.get('ALERTY_WWW'):
