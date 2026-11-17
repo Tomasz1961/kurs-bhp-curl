@@ -25,14 +25,18 @@ function atrapa(D0){const D={'kurs_admin/dane':D0};
   await p.goto('file://'+require('path').resolve(K)+'#start');await p.waitForTimeout(4500);
   const r=await p.evaluate(([vh,names])=>{
    const st=document.getElementById('start');const top=st.getBoundingClientRect().top+scrollY;
-   // widoczne węzły tekstowe (także w elementach z dziećmi); tekst sklejony z mapą przesunięć, położenie sprawdzane dla zakresu dopasowanego nazwiska (uwagi Copilota do PR #17 i #18)
-   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const wez=[];let tn,S='';
+   // widoczne węzły tekstowe (także w elementach z dziećmi), łączone tylko w obrębie jednego bloku, białe znaki zwinięte z mapą znak→węzeł;
+   // każdy człon imienia i nazwiska szukany osobno (odstęp z układu – flex gap, nowy wiersz – nie ukrywa nazwiska); nazwisko widoczne, gdy wszystkie człony są na pierwszych ekranach;
+   // położenie sprawdzane dla zakresu dopasowanego członu (uwagi Copilota do PR #17 i #18)
+   const blok=e=>{while(e&&e!==st&&/^inline/.test(getComputedStyle(e).display))e=e.parentElement;return e||st};
+   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const G=new Map();let tn;
    while((tn=tw.nextNode())){const pe=tn.parentElement;if(!tn.textContent||!pe||pe.offsetParent===null||getComputedStyle(pe).visibility!=='visible')continue;
-    wez.push([tn,S.length]);S+=tn.textContent}
-   const gdzie=i=>{let k=0;while(k+1<wez.length&&wez[k+1][1]<=i)k++;return [wez[k][0],i-wez[k][1]]};
-   const naGorze=(i,n)=>{const rg=document.createRange();const [a,ao]=gdzie(i),[z,zo]=gdzie(i+n.length-1);rg.setStart(a,ao);rg.setEnd(z,zo+1);
+    const bk=blok(pe);if(!G.has(bk))G.set(bk,{S:'',M:[]});const g=G.get(bk);const t=tn.textContent;
+    for(let j=0;j<t.length;j++){const c=/\s/.test(t[j])?' ':t[j];if(c===' '&&g.S.endsWith(' '))continue;g.S+=c;g.M.push([tn,j])}}
+   const naGorze=(g,i,n)=>{const rg=document.createRange();const [a,ao]=g.M[i],[z,zo]=g.M[i+n-1];rg.setStart(a,ao);rg.setEnd(z,zo+1);
     return [...rg.getClientRects()].some(q=>q.height>0&&q.top+scrollY-top<2*vh)};
-   const widoczne=n=>{for(let i=S.indexOf(n);i>=0;i=S.indexOf(n,i+1))if(naGorze(i,n))return true;return false};
+   const granica=(S,i,n)=>!/\p{L}/u.test(S[i-1]||'')&&!/\p{L}/u.test(S[i+n]||'');
+   const widoczne=nm=>nm.split(/\s+/).filter(Boolean).every(w=>{for(const g of G.values())for(let i=g.S.indexOf(w);i>=0;i=g.S.indexOf(w,i+1))if(granica(g.S,i,w.length)&&naGorze(g,i,w.length))return true;return false});
    const h=[...st.querySelectorAll('h3')].filter(x=>x.offsetParent!==null).map(x=>x.textContent.trim());
    const zesp=document.getElementById('sto_zespol');
    return {nazwiskaWidoczne:names.filter(widoczne),h3:h.slice(0,3),wStanie:zesp?zesp.querySelectorAll('li').length:-1,
