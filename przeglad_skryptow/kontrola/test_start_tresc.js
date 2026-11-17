@@ -25,15 +25,17 @@ function atrapa(D0){const D={'kurs_admin/dane':D0};
   await p.goto('file://'+require('path').resolve(K)+'#start');await p.waitForTimeout(4500);
   const r=await p.evaluate(([vh,names])=>{
    const st=document.getElementById('start');const top=st.getBoundingClientRect().top+scrollY;
-   // widoczne węzły tekstowe z położeniem (także w elementach mających dzieci, np. <span class="nazwisko">…<span class="data">) – uwaga Copilota do PR #17
-   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const vt=[];let tn;
-   while((tn=tw.nextNode())){if(!tn.textContent.trim()||!tn.parentElement||tn.parentElement.offsetParent===null)continue;
-    const rg=document.createRange();rg.selectNodeContents(tn);const q=[...rg.getClientRects()].find(x=>x.height>0);
-    if(q&&q.top+scrollY-top<2*vh)vt.push(tn.parentElement.textContent)}
-   const vis=vt.join(' ');
+   // widoczne węzły tekstowe (także w elementach z dziećmi); tekst sklejony z mapą przesunięć, położenie sprawdzane dla zakresu dopasowanego nazwiska (uwagi Copilota do PR #17 i #18)
+   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const wez=[];let tn,S='';
+   while((tn=tw.nextNode())){const pe=tn.parentElement;if(!tn.textContent||!pe||pe.offsetParent===null||getComputedStyle(pe).visibility!=='visible')continue;
+    wez.push([tn,S.length]);S+=tn.textContent}
+   const gdzie=i=>{let k=0;while(k+1<wez.length&&wez[k+1][1]<=i)k++;return [wez[k][0],i-wez[k][1]]};
+   const naGorze=(i,n)=>{const rg=document.createRange();const [a,ao]=gdzie(i),[z,zo]=gdzie(i+n.length-1);rg.setStart(a,ao);rg.setEnd(z,zo+1);
+    return [...rg.getClientRects()].some(q=>q.height>0&&q.top+scrollY-top<2*vh)};
+   const widoczne=n=>{for(let i=S.indexOf(n);i>=0;i=S.indexOf(n,i+1))if(naGorze(i,n))return true;return false};
    const h=[...st.querySelectorAll('h3')].filter(x=>x.offsetParent!==null).map(x=>x.textContent.trim());
    const zesp=document.getElementById('sto_zespol');
-   return {nazwiskaWidoczne:names.filter(n=>vis.includes(n)),h3:h.slice(0,3),wStanie:zesp?zesp.querySelectorAll('li').length:-1,
+   return {nazwiskaWidoczne:names.filter(widoczne),h3:h.slice(0,3),wStanie:zesp?zesp.querySelectorAll('li').length:-1,
      nazwiskWZespole:zesp?names.filter(n=>zesp.textContent.includes(n)).length:0,
      osobWKursie:(typeof PEOPLE!=='undefined'?PEOPLE:[]).length,
      stanWKartach:document.querySelectorAll('.wsz-karta .wsz-stan').length,przyciski:[...st.querySelectorAll('[data-sto-start]')].map(x=>x.dataset.stoStart)}},[vp.height,NAZW]);
