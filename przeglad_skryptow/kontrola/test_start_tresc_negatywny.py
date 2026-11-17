@@ -12,13 +12,24 @@ PRZYPADKI = {  # nazwa: (wstawka, czy test ma zgłosić błąd)
     'dwa_odlegle_bloki': (f'<p>{a} </p><p style="margin-top:9000px">{b}</p>', False),
     'inline': (f'<p>Wstęp <b>{a}</b> {b}</p>', True),
     'nowa_linia': (f'<p><span>{a}</span>\n<span>{b}</span></p>', True),
-    'flex_gap': (f'<div style="display:flex;gap:8px"><div>{a}</div><div>{b}</div></div>', True)}
+    'flex_gap': (f'<div style="display:flex;gap:8px"><div>{a}</div><div>{b}</div></div>', True),
+    'br': (f'<p><span>{a}</span><br><span>{b}</span></p>', True),
+    'slowo_podzielone_inline': (f'<p>{a} {b[:2]}<b>{b[2:]}</b></p>', True),
+    'blok_wewnatrz_nazwiska': (f'<div>{a} {b[:2]}<div>inny tekst</div>{b[2:]}</div>', False),
+    'czlony_w_roznych_akapitach': (f'<p>Wprowadzenie: {a}</p><p>Kontakt: {b}</p>', False)}
 zle = []
 with tempfile.TemporaryDirectory() as td:
     for nazwa, (w, blad) in PRZYPADKI.items():
         f = os.path.join(td, nazwa + '.html'); open(f, 'w', encoding='utf8').write(h[:i] + w + h[i:])
         r = subprocess.run(['node', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_start_tresc.js'), f, AD], capture_output=True, text=True, timeout=600)
-        wykryto = r.returncode != 0
-        print(f'{nazwa}: oczekiwano {"BŁĄD" if blad else "OK"}, wynik {"BŁĄD" if wykryto else "OK"}')
+        # wynik z JSON: wykrycie = wstawione nazwisko w „nazwiskaWidoczne” obu szerokości; inne błędy testu = niepowodzenie (uwaga Copilota)
+        try: W = json.loads(r.stdout[r.stdout.index('{'):])
+        except Exception: zle.append(nazwa + ' (brak wyniku JSON)'); continue
+        wykr = [n in (W.get(k) or {}).get('nazwiskaWidoczne', []) for k in ('1366', '390')]
+        inne = [e for e in W.get('bledy', []) if 'nazwiska na pierwszych ekranach' not in e]
+        if inne: zle.append(nazwa + ' (inne błędy: ' + '; '.join(inne)[:200] + ')'); continue
+        if len(set(wykr)) != 1: zle.append(nazwa + ' (różny wynik dla szerokości)'); continue
+        wykryto = wykr[0]
+        print(f'{nazwa}: oczekiwano {"wykrycia" if blad else "braku wykrycia"}, wynik {"wykryto" if wykryto else "nie wykryto"}')
         if wykryto != blad: zle.append(nazwa)
 print('WYNIK:', 'BŁĄD ' + ','.join(zle) if zle else 'OK'); sys.exit(1 if zle else 0)

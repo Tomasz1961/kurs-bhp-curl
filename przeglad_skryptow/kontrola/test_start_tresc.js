@@ -25,18 +25,24 @@ function atrapa(D0){const D={'kurs_admin/dane':D0};
   await p.goto('file://'+require('path').resolve(K)+'#start');await p.waitForTimeout(4500);
   const r=await p.evaluate(([vh,names])=>{
    const st=document.getElementById('start');const top=st.getBoundingClientRect().top+scrollY;
-   // widoczne węzły tekstowe (także w elementach z dziećmi), łączone tylko w obrębie jednego bloku, białe znaki zwinięte z mapą znak→węzeł;
-   // każdy człon imienia i nazwiska szukany osobno (odstęp z układu – flex gap, nowy wiersz – nie ukrywa nazwiska); nazwisko widoczne, gdy wszystkie człony są na pierwszych ekranach;
-   // położenie sprawdzane dla zakresu dopasowanego członu (uwagi Copilota do PR #17 i #18)
-   const blok=e=>{while(e&&e!==st&&/^inline/.test(getComputedStyle(e).display))e=e.parentElement;return e||st};
-   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const G=new Map();let tn;
-   while((tn=tw.nextNode())){const pe=tn.parentElement;if(!tn.textContent||!pe||pe.offsetParent===null||getComputedStyle(pe).visibility!=='visible')continue;
-    const bk=blok(pe);if(!G.has(bk))G.set(bk,{S:'',M:[]});const g=G.get(bk);const t=tn.textContent;
-    for(let j=0;j<t.length;j++){const c=/\s/.test(t[j])?' ':t[j];if(c===' '&&g.S.endsWith(' '))continue;g.S+=c;g.M.push([tn,j])}}
-   const naGorze=(g,i,n)=>{const rg=document.createRange();const [a,ao]=g.M[i],[z,zo]=g.M[i+n-1];rg.setStart(a,ao);rg.setEnd(z,zo+1);
+   // Tekst widoczny jak w renderze: przejście po drzewie, segment kończy każdy element nie-„inline” (blok, flex, inline-block), <br> oraz element inline
+   // z poziomym marginesem/odstępem; w segmencie węzły sklejane wprost (słowo podzielone między <b> i tekst zostaje całe), białe znaki zwinięte.
+   // Nazwisko = wszystkie człony po kolei, rozdzielone wyłącznie odstępem lub granicą segmentu (bez innego tekstu); położenie sprawdzane dla
+   // początku KAŻDEGO członu (uwagi Copilota do PR #17 i #18).
+   let S='';const M=[];const sep=()=>{if(S&&!S.endsWith('\n')){if(S.endsWith(' ')){S=S.slice(0,-1);M.pop()}S+='\n';M.push(null)}};
+   const widocznyEl=e=>e.offsetParent!==null||getComputedStyle(e).position==='fixed';
+   const graniczny=e=>{const cs=getComputedStyle(e);return e.tagName==='BR'||cs.display!=='inline'||['marginLeft','marginRight','paddingLeft','paddingRight'].some(k=>parseFloat(cs[k])>0)};
+   const idz=el=>{for(const ch of el.childNodes){
+     if(ch.nodeType===3){const pe=ch.parentElement;if(!pe||!widocznyEl(pe)||getComputedStyle(pe).visibility!=='visible')continue;const t=ch.textContent;
+       for(let j=0;j<t.length;j++){const c=/\s/.test(t[j])?' ':t[j];if(c===' '&&(S===''||/[ \n]$/.test(S)))continue;S+=c;M.push([ch,j])}}
+     else if(ch.nodeType===1){const cs=getComputedStyle(ch);if(cs.display==='none')continue;const g=graniczny(ch);if(g)sep();idz(ch);if(g)sep()}}};
+   idz(st);
+   const naGorze=i=>{const m=M[i];if(!m)return false;const rg=document.createRange();rg.setStart(m[0],m[1]);rg.setEnd(m[0],m[1]+1);
     return [...rg.getClientRects()].some(q=>q.height>0&&q.top+scrollY-top<2*vh)};
-   const granica=(S,i,n)=>!/\p{L}/u.test(S[i-1]||'')&&!/\p{L}/u.test(S[i+n]||'');
-   const widoczne=nm=>nm.split(/\s+/).filter(Boolean).every(w=>{for(const g of G.values())for(let i=g.S.indexOf(w);i>=0;i=g.S.indexOf(w,i+1))if(granica(g.S,i,w.length)&&naGorze(g,i,w.length))return true;return false});
+   const esc=w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+   const widoczne=nm=>{const cz=nm.split(/\s+/).filter(Boolean);if(!cz.length)return false;
+    const re=new RegExp('(?<!\\p{L})'+cz.map(w=>'('+esc(w)+')').join('[ \\n]+')+'(?!\\p{L})','gud');let m;
+    while((m=re.exec(S))){if(m.indices.slice(1).every(([i])=>naGorze(i)))return true;re.lastIndex=m.index+1}return false};
    const h=[...st.querySelectorAll('h3')].filter(x=>x.offsetParent!==null).map(x=>x.textContent.trim());
    const zesp=document.getElementById('sto_zespol');
    return {nazwiskaWidoczne:names.filter(widoczne),h3:h.slice(0,3),wStanie:zesp?zesp.querySelectorAll('li').length:-1,
