@@ -11,7 +11,7 @@ Zmiany (poprawka na gotowym pliku, bez przebudowy; tekst wyłącznie z kursu –
  4) blok „Plansze: dobrze i źle” modułu 12 przeniesiony z zakładki „rejestr” do modułu 12 (błąd kroku 11d2 przy ostatnim module).
 Stan każdej planszy w tabeli obraz_objasnienie (sekcja, ident, ma_dobrze_zle_widoczne, zrodlo); plansze bez tekstu w kursie
 → stan „DO OPRACOWANIA” (kontrola D-150 pokazuje liczbę, tekst dopisuje się z treści kursu, nie z pamięci). Idempotentne, bez LLM."""
-import re, sqlite3, os, sys, html as H
+import re, sqlite3, os, sys, html as H, hashlib, base64
 B = '/mnt/project-files/bhp'
 P = sys.argv[1] if len(sys.argv) > 1 else f'{B}/kurs_online/kurs_bhp_curl.html'
 s = open(P, encoding='utf-8').read(); s0 = s
@@ -58,12 +58,20 @@ for w in open(TSV, encoding='utf-8').read().rstrip('\n').split('\n')[1:]:
     for c_ in cyt.split(' | '):
         assert c_.strip() in ts, f'STOP 11zz11: cytat do {k} nie występuje w module {sc_}: {c_[:80]}'
     OBJ[k] = (dob, zle, dl or cyt.split(' | ')[0])
+# oznaczenie rysunku z rejestru obrazów (po skrócie obrazu) – klucz tabeli objaśnień dla plansz bez atrybutu data-* („m9:SCHEMAT_store”)
+_rj = sqlite3.connect(f'file:{os.environ.get("BHP_DB", B + "/bhp_rejestr.sqlite")}?mode=ro', uri=True)
+RYS = {sh: idt for idt, sh in _rj.execute("select ident, sha256_w_stronie from obraz_uzycie where strona like 'kurs%'")}; _rj.close()
+n7 = 0; n8 = 0
 def zamien(m):
-    global n2, n5, n6
+    global n2, n5, n6, n7, n8
     f = m.group(0); sc = sekcja(m.start())
     ident = (re.search(r'data-(?:v2|gd|ident|img|id)="([^"]+)"', f) or re.search(r'id="([^"]+)"', f))
     ident = ident.group(1) if ident else f'{sc}#{m.start()}'
-    if not re.match(r'm\d+$', sc or ''): return f
+    # moduły m1–m12 oraz zakładka ŚOI (plansze modułu 5; uwaga Copilota do PR #16); skany kart ryzyka to dokumenty, nie plansze
+    if not re.match(r'm\d+$|soi$', sc or ''): return f
+    im0 = re.search(r'src="data:image/[a-z+]+;base64,([^"]+)"', f)
+    rys = RYS.get(hashlib.sha256(base64.b64decode(im0.group(1))).hexdigest(), '') if im0 else ''
+    klucz = ident if ident in OBJ else f'{sc}:{rys}'
     alt = re.search(r'alt="([^"]*)"', f); alt = H.unescape(alt.group(1)) if alt else ''
     cap = re.search(r'<figcaption[^>]*>(.*?)</figcaption>', f, re.S)
     capt = re.sub(r'<[^>]+>', ' ', cap.group(1)) if cap else ''
@@ -75,8 +83,8 @@ def zamien(m):
             dz = f'<span class="dz"><b>Dobrze:</b> {H.escape(dob)} <b>Źle:</b> {H.escape(zle)}</span>'
             f = f[:cap.end(1)] + ' ' + dz + f[cap.end(1):]; ma = True; n2 += 1
             zr = 'alt planszy (tekst kursu)'
-        elif ident in OBJ and cap:
-            dob, zle, dl = OBJ[ident]
+        elif klucz in OBJ and OBJ[klucz][0] and cap:
+            dob, zle, dl = OBJ[klucz]
             dz = f'<span class="dz"><b>Dobrze:</b> {H.escape(dob)}' + (f' <b>Źle:</b> {H.escape(zle)}' if zle else '') + f' <b>Dlaczego:</b> {H.escape(dl)}</span>'
             f = f[:cap.end(1)] + ' ' + dz + f[cap.end(1):]; ma = True; n5 += 1
             zr = 'dane/objasnienia_rysunkow.tsv (cytat z modułu sprawdzony)'
@@ -87,9 +95,33 @@ def zamien(m):
             ma = len(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.search(r'<figcaption[^>]*>(.*?)</figcaption>', f, re.S).group(1))).strip()) >= 60
             zr = 'instrukcja krok po kroku – objaśnienie w podpisie' if ma else 'brak objaśnienia w kursie'
         else: zr = 'brak tekstu dobrze/źle w kursie'
-    else: zr = 'podpis'
-    if ma and zr == 'podpis' and 'Dlaczego:' not in f and ident in OBJ: pass
-    rej.append((sc, ident, 1 if ma else 0, zr if ma else 'brak tekstu dobrze/źle w kursie'))
+    else:
+        zr = 'podpis'
+        # starsze podpisy „Właściwie: … Niewłaściwie: …” bez objaśnienia: ta sama treść jako „Dobrze / Źle” (uwaga Copilota do PR #17)
+        if cap and 'class="dz"' not in f:
+            c1 = cap.group(1)
+            g = re.search(r'(?:Właściwie|Prawidłowo|Dobrze)\s*:\s*(.+?)\s*(?:Niewłaściwie|Błędnie|Źle)\s*:\s*(.+?)(?=\s*<span|\s*$)', c1, re.S)
+            if g:
+                c2 = (c1[:g.start()].rstrip() + ' ' + c1[g.end():].strip()).rstrip()
+                c2 += f' <span class="dz"><b>Dobrze:</b> {g.group(1).strip()} <b>Źle:</b> {g.group(2).strip()}</span>'
+                f = f[:cap.start(1)] + c2 + f[cap.end(1):]; n8 += 1
+    # „Dlaczego” do istniejącego objaśnienia „Dobrze/Źle” (z tabeli objaśnień, cytat sprawdzony z modułem; uwaga Copilota do PR #16)
+    dzm0 = re.search(r'<span class="dz">(.*?)</span>', f, re.S)
+    if dzm0 and 'Dlaczego:' not in dzm0.group(1) and '<b>Źle:</b>' in dzm0.group(1) and klucz in OBJ:
+        f = f[:dzm0.end(1)] + f' <b>Dlaczego:</b> {H.escape(OBJ[klucz][2])}' + f[dzm0.end(1):]; n7 += 1
+    # tekst objaśnienia z gotowego podpisu (ten sam znak w znak, który widzi uczestnik) – dla innych silników (zapytanie systemu BHP 16.11.2026 23:16)
+    cp = re.search(r'<figcaption[^>]*>(.*?)</figcaption>', f, re.S); cp = cp.group(1) if cp else ''
+    dzm = re.search(r'<span class="dz">(.*?)</span>', cp, re.S)
+    txt = lambda t: re.sub(r'\s+', ' ', H.unescape(re.sub(r'<[^>]+>', ' ', t))).strip()
+    podp = txt(cp[:dzm.start()] if dzm else cp); czesci = {'Dobrze': '', 'Źle': '', 'Dlaczego': '', 'Jak postępować': ''}
+    if dzm:
+        for k_, v_ in re.findall(r'<b>(Dobrze|Źle|Dlaczego|Jak postępować):</b>(.*?)(?=<b>(?:Dobrze|Źle|Dlaczego|Jak postępować):</b>|$)', dzm.group(1), re.S): czesci[k_] = txt(v_)
+    if zr == 'podpis' and dzm:   # drugi przebieg: źródło z treści objaśnienia, nie „podpis”
+        zr = ('dane/objasnienia_rysunkow.tsv (cytat z modułu sprawdzony)' if czesci['Dlaczego'] else
+              'instrukcja krok po kroku – objaśnienie w podpisie' if czesci['Jak postępować'] else 'alt planszy (tekst kursu)')
+    im = re.search(r'src="data:image/[a-z+]+;base64,([^"]+)"', f)
+    sha = hashlib.sha256(base64.b64decode(im.group(1))).hexdigest() if im else ''
+    rej.append((sc, ident, 1 if ma else 0, zr if ma else 'brak tekstu dobrze/źle w kursie', sha, podp, czesci['Dobrze'], czesci['Źle'], czesci['Dlaczego'], czesci['Jak postępować']))
     return f
 s = re.sub(r'<figure[^>]*>.*?</figure>', zamien, s, flags=re.S)
 # styl objaśnień na stronie kursu (nie w szablonie wydruku fullDoc, gdzie trafił pierwszy przebieg przez „</head>” w tekście skryptu)
@@ -106,11 +138,19 @@ assert s.count(STYL) == 1 and s.find(STYL) < 400, 'STOP 11zz11: styl objaśnień
 if s != s0: open(P, 'w', encoding='utf-8').write(s)
 if len(sys.argv) <= 1:
     c = sqlite3.connect(os.environ.get('BHP_DB', f'{B}/bhp_rejestr.sqlite'))
-    c.execute('create table if not exists obraz_objasnienie(sekcja text, ident text, ma_dobrze_zle_widoczne integer, zrodlo text, stan text, primary key(sekcja, ident))')
-    c.execute('delete from obraz_objasnienie')
-    c.executemany("insert or replace into obraz_objasnienie values(?,?,?,?,?)",
-                  [(a_, b_, c_, d_, 'OBJAŚNIONA' if c_ else 'DO OPRACOWANIA') for a_, b_, c_, d_ in rej])
+    c.execute('begin')   # usunięcie, odtworzenie i wypełnienie tabeli oraz widoku w jednej transakcji (uwaga Copilota do PR #17)
+    c.execute('drop view if exists v_obraz_objasnienie'); c.execute('drop table if exists obraz_objasnienie')
+    c.execute('''create table obraz_objasnienie(sekcja text, ident text, ma_dobrze_zle_widoczne integer, zrodlo text, stan text,
+                 sha256_obrazu text, podpis text, dobrze text, zle text, dlaczego text, jak_postepowac text, primary key(sekcja, ident))''')
+    c.executemany("insert or replace into obraz_objasnienie values(?,?,?,?,?,?,?,?,?,?,?)",
+                  [(r_[0], r_[1], r_[2], r_[3], 'OBJAŚNIONA' if r_[2] and not (r_[7] and not r_[8]) else
+                    ('DO OPRACOWANIA – brak „dlaczego”' if r_[2] else 'DO OPRACOWANIA')) + r_[4:] for r_ in rej])
+    # widok dla innych silników: objaśnienie + plik oryginału i oznaczenie rysunku z rejestru obrazów (klucz: skrót obrazu w kursie)
+    c.execute('''create view v_obraz_objasnienie as select o.sekcja, o.ident, u.ident as ident_rysunku, u.plik_zrodlowy, o.sha256_obrazu,
+                 o.podpis, o.dobrze, o.zle, o.dlaczego, o.jak_postepowac, o.zrodlo, o.stan
+                 from obraz_objasnienie o left join (select distinct ident, plik_zrodlowy, sha256_w_stronie from obraz_uzycie where strona like 'kurs%') u
+                 on u.sha256_w_stronie = o.sha256_obrazu''')
     c.execute("update decyzja_ts set wdrozenie='krok 11zz11 build_objasnienia_rysunkow_1116.py (dobrze/źle z treści planszy do podpisu; tabela obraz_objasnienie); kontrola D-150' where id=150")
     c.commit(); c.close()
 print(f'11zz11 objaśnienia rysunków: dopiski usunięte {n1 + n1b} | dobrze/źle dodane {n2} | „do przeglądu” usunięte {n3} | m12 przeniesiony {n4} '
-      f'| z tabeli objaśnień {n5} | instrukcje {n6} | plansze w modułach {len(rej)}, z widocznym dobrze/źle {sum(r[2] for r in rej)}')
+      f'| z tabeli objaśnień {n5} | instrukcje {n6} | „dlaczego” dopisane {n7} | podpisy Właściwie/Niewłaściwie {n8} | plansze w modułach {len(rej)}, z widocznym dobrze/źle {sum(r[2] for r in rej)}')
