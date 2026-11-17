@@ -25,7 +25,12 @@ function atrapa(D0){const D={'kurs_admin/dane':D0};
   await p.goto('file://'+require('path').resolve(K)+'#start');await p.waitForTimeout(4500);
   const r=await p.evaluate(([vh,names])=>{
    const st=document.getElementById('start');const top=st.getBoundingClientRect().top+scrollY;
-   const vis=[...st.querySelectorAll('*')].filter(e=>{const q=e.getBoundingClientRect();return e.children.length===0&&q.height>0&&q.top+scrollY-top<2*vh&&e.offsetParent!==null}).map(e=>e.textContent).join(' ');
+   // widoczne węzły tekstowe z położeniem (także w elementach mających dzieci, np. <span class="nazwisko">…<span class="data">) – uwaga Copilota do PR #17
+   const tw=document.createTreeWalker(st,NodeFilter.SHOW_TEXT);const vt=[];let tn;
+   while((tn=tw.nextNode())){if(!tn.textContent.trim()||!tn.parentElement||tn.parentElement.offsetParent===null)continue;
+    const rg=document.createRange();rg.selectNodeContents(tn);const q=[...rg.getClientRects()].find(x=>x.height>0);
+    if(q&&q.top+scrollY-top<2*vh)vt.push(tn.parentElement.textContent)}
+   const vis=vt.join(' ');
    const h=[...st.querySelectorAll('h3')].filter(x=>x.offsetParent!==null).map(x=>x.textContent.trim());
    const zesp=document.getElementById('sto_zespol');
    return {nazwiskaWidoczne:names.filter(n=>vis.includes(n)),h3:h.slice(0,3),wStanie:zesp?zesp.querySelectorAll('li').length:-1,
