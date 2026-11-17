@@ -420,3 +420,9 @@ for _p, _o in {'krok': 'krok budowy kursu, który usunął fragment', 'fragment'
                'sekcja': 'moduł (zakładka) kursu', 'ma_dobrze_zle_widoczne': 'czy objaśnienie dobrze/źle jest widoczne w podpisie (1 = tak)',
                'zrodlo': 'źródło tekstu objaśnienia (opis planszy, tabela objaśnień z cytatem z modułu, podpis)', 'stan': 'stan objaśnienia (OBJAŚNIONA albo DO OPRACOWANIA)'}.items():
     POLA.setdefault(_p, _o)
+# 16.11.2026 23:20 – tekst objaśnień dla innych silników (zapytanie wątku systemu BHP: strona „Środki ochrony” pokazuje te same rysunki)
+TABELE['v_obraz_objasnienie'] = ('BHP-MAT', 'dane', 'Objaśnienia plansz kursu dla innych części aplikacji (np. strony „Środki ochrony”): moduł, oznaczenie planszy i rysunku, plik oryginału, skrót obrazu, podpis, „dobrze”, „źle”, „dlaczego”, „jak postępować” – tekst znak w znak jak w kursie.')
+for _p, _o in {'sha256_obrazu': 'skrót SHA-256 obrazu tak, jak jest w kursie (klucz do rejestru obrazów)', 'podpis': 'podpis planszy widoczny w kursie (bez objaśnienia)',
+               'dobrze': 'tekst „Dobrze” spod planszy', 'zle': 'tekst „Źle” spod planszy', 'dlaczego': 'tekst „Dlaczego” spod planszy',
+               'jak_postepowac': 'tekst „Jak postępować” spod planszy (instrukcje krok po kroku)', 'ident_rysunku': 'oznaczenie rysunku z rejestru obrazów'}.items():
+    POLA.setdefault(_p, _o)

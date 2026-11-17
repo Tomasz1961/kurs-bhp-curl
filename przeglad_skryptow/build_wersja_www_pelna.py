@@ -82,6 +82,12 @@ _piny = {k: v['sha'] for k, v in _pj.items() if isinstance(v, dict) and re.fullm
 _piny = {k: v for k, v in _piny.items() if k in {o[0] for o in _osoby}}
 assert len(_piny) >= 10, 'za mało PIN-ów do logowania na www'
 _dane = json.load(open(f'{B}/kurs_online/kurs_admin_dane.json', encoding='utf8'))
+# dec. TS 153: listy braków nie trafiają na stronę www (podgląd p. Grzegórskiej) – w danych osób pole „braki” puste (uwaga Copilota do PR #16)
+_pd = _dane.get('prac-data'); _pds = isinstance(_pd, str); _pd = json.loads(_pd) if _pds else _pd
+if _pd:
+    for _o in _pd.get('ludzie', []): _o['braki'] = []
+    _dane['prac-data'] = json.dumps(_pd, ensure_ascii=False) if _pds else _pd
+assert not os.environ.get('ALERTY_WWW'), 'STOP D-153: sprawy do załatwienia (braki) nie idą na stronę www'
 _rek = [{'kol': 'kurs_admin', 'id': 'dane', 'd': _dane}]
 if os.environ.get('ALERTY_WWW'):
     _al = json.load(open(os.environ['ALERTY_WWW'], encoding='utf8')); _al = _al.get('data', _al)

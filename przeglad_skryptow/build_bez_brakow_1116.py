@@ -27,6 +27,12 @@ if i >= 0:
         _c.commit(); _c.close()
 n_karta = h.count('brak karty – do uzupełnienia przez dział BHP IUNG-PIB')
 h = h.replace('<td>brak karty – do uzupełnienia przez dział BHP IUNG-PIB</td>', '<td>—</td>')
+# zakładka „Pracownicy” (podgląd p. Grzegórskiej): bez listy „Braki” i bez licznika braków przy nazwisku (uwaga Copilota do PR #16, dec. 153)
+_LB = '${p.braki.length?`<span class="b">${p.braki.length}</span>`:""}'
+_HB = '  if(p.braki.length)h+=`<h3>Braki</h3><ul class="braki">${p.braki.map(b=>`<li>${e(b)}</li>`).join("")}</ul>`;'
+n_prac = h.count(_LB) + h.count(_HB)
+h = h.replace(_LB, '').replace(_HB, '')
+assert '<h3>Braki</h3>' not in h and 'p.braki.length' not in h, 'STOP 11zz10: lista braków w zakładce Pracownicy'
 for w in ('Braki w rejestrze', 'brak karty – do uzupełnienia'):
     assert w not in h, f'STOP 11zz10: „{w}” nadal w kursie'
 # blok usunięty wcześniej (kurs już bez niego): treść z kopii zapisanej przy pierwszym usunięciu (zrodla/kurs_usuniety_11zz10_soi_braki.html)
@@ -46,4 +52,4 @@ if len(sys.argv) <= 1:
      'krok 11zz10 build_bez_brakow_1116.py (kurs bez list braków); kontrola D-153; panel – wątek systemu BHP', 'WDROZONE_W_PLIKU',
      'czat projektu, TS 16.11.2026 20:21:22 UTC (cmsg_01LjRRUGCMRdzeCLcFKfUaaM8kMVXYwQpX9XckaXhvwBge); zrodla/ts_2026-11-16_2021_panel_wewnetrzny.txt')""", (cyt,))
     c.commit(); c.close()
-print(f'11zz10 listy braków poza kursem: kurs {"zmieniony" if h != h0 else "bez zmian"} | „brak karty” zamienionych {n_karta}')
+print(f'11zz10 listy braków poza kursem: kurs {"zmieniony" if h != h0 else "bez zmian"} | „brak karty” zamienionych {n_karta} | braki w zakładce Pracownicy usunięte {n_prac}')
