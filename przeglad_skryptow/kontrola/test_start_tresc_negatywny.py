@@ -16,7 +16,8 @@ PRZYPADKI = {  # nazwa: (wstawka, czy test ma zgłosić błąd)
     'br': (f'<p><span>{a}</span><br><span>{b}</span></p>', True),
     'slowo_podzielone_inline': (f'<p>{a} {b[:2]}<b>{b[2:]}</b></p>', True),
     'blok_wewnatrz_nazwiska': (f'<div>{a} {b[:2]}<div>inny tekst</div>{b[2:]}</div>', False),
-    'czlony_w_roznych_akapitach': (f'<p>Wprowadzenie: {a}</p><p>Kontakt: {b}</p>', False)}
+    'czlony_w_roznych_akapitach': (f'<p>Wprowadzenie: {a}</p><p>Kontakt: {b}</p>', False),
+    'display_contents': (f'<span style="display:contents">{n}<small> 2026</small></span>', True)}
 zle = []
 with tempfile.TemporaryDirectory() as td:
     for nazwa, (w, blad) in PRZYPADKI.items():
@@ -26,10 +27,14 @@ with tempfile.TemporaryDirectory() as td:
         try: W = json.loads(r.stdout[r.stdout.index('{'):])
         except Exception: zle.append(nazwa + ' (brak wyniku JSON)'); continue
         wykr = [n in (W.get(k) or {}).get('nazwiskaWidoczne', []) for k in ('1366', '390')]
-        inne = [e for e in W.get('bledy', []) if 'nazwiska na pierwszych ekranach' not in e]
+        # spójność: kod wyjścia, WYNIK, lista nazwisk i błędy muszą odpowiadać oczekiwaniu (uwaga Copilota)
+        if blad: inne = [e for e in W.get('bledy', []) if 'nazwiska na pierwszych ekranach' not in e]
+        else: inne = list(W.get('bledy', []))
         if inne: zle.append(nazwa + ' (inne błędy: ' + '; '.join(inne)[:200] + ')'); continue
         if len(set(wykr)) != 1: zle.append(nazwa + ' (różny wynik dla szerokości)'); continue
         wykryto = wykr[0]
+        spojny = (r.returncode != 0) == wykryto and (W.get('WYNIK') == 'BŁĄD') == wykryto
+        if not spojny: zle.append(nazwa + f' (niespójny wynik: kod {r.returncode}, WYNIK {W.get("WYNIK")}, wykryto {wykryto})'); continue
         print(f'{nazwa}: oczekiwano {"wykrycia" if blad else "braku wykrycia"}, wynik {"wykryto" if wykryto else "nie wykryto"}')
         if wykryto != blad: zle.append(nazwa)
 print('WYNIK:', 'BŁĄD ' + ','.join(zle) if zle else 'OK'); sys.exit(1 if zle else 0)

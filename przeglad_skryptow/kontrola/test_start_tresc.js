@@ -25,15 +25,14 @@ function atrapa(D0){const D={'kurs_admin/dane':D0};
   await p.goto('file://'+require('path').resolve(K)+'#start');await p.waitForTimeout(4500);
   const r=await p.evaluate(([vh,names])=>{
    const st=document.getElementById('start');const top=st.getBoundingClientRect().top+scrollY;
-   // Tekst widoczny jak w renderze: przejście po drzewie, segment kończy każdy element nie-„inline” (blok, flex, inline-block), <br> oraz element inline
+   // Widoczność węzła tekstowego z jego zakresu (działa też dla display:contents). Tekst widoczny jak w renderze: przejście po drzewie, segment kończy każdy element nie-„inline” (blok, flex, inline-block), <br> oraz element inline
    // z poziomym marginesem/odstępem; w segmencie węzły sklejane wprost (słowo podzielone między <b> i tekst zostaje całe), białe znaki zwinięte.
    // Nazwisko = wszystkie człony po kolei, rozdzielone wyłącznie odstępem lub granicą segmentu (bez innego tekstu); położenie sprawdzane dla
    // początku KAŻDEGO członu (uwagi Copilota do PR #17 i #18).
    let S='';const M=[];const sep=()=>{if(S&&!S.endsWith('\n')){if(S.endsWith(' ')){S=S.slice(0,-1);M.pop()}S+='\n';M.push(null)}};
-   const widocznyEl=e=>e.offsetParent!==null||getComputedStyle(e).position==='fixed';
    const graniczny=e=>{const cs=getComputedStyle(e);return e.tagName==='BR'||cs.display!=='inline'||['marginLeft','marginRight','paddingLeft','paddingRight'].some(k=>parseFloat(cs[k])>0)};
    const idz=el=>{for(const ch of el.childNodes){
-     if(ch.nodeType===3){const pe=ch.parentElement;if(!pe||!widocznyEl(pe)||getComputedStyle(pe).visibility!=='visible')continue;const t=ch.textContent;
+     if(ch.nodeType===3){const pe=ch.parentElement;if(!pe||getComputedStyle(pe).visibility!=='visible')continue;{const r0=document.createRange();r0.selectNodeContents(ch);if(![...r0.getClientRects()].some(q=>q.height>0))continue}const t=ch.textContent;
        for(let j=0;j<t.length;j++){const c=/\s/.test(t[j])?' ':t[j];if(c===' '&&(S===''||/[ \n]$/.test(S)))continue;S+=c;M.push([ch,j])}}
      else if(ch.nodeType===1){const cs=getComputedStyle(ch);if(cs.display==='none')continue;const g=graniczny(ch);if(g)sep();idz(ch);if(g)sep()}}};
    idz(st);
