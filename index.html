@@ -4862,7 +4862,7 @@ function hqSum(m){const d=document.querySelector(`details.hist[data-m="${m}"]`);
   const L=HQ_LOG[m]||{},ids=Object.keys(L),zle=ids.filter(id=>!L[id].ok),P=HQ_POWT[m]||{proby:[],od:0};
   const fig=h=>{const im=h&&h.img&&HIMG[h.img];return im?`<figure style="margin:6px 0"><img alt="${hx(im.cap)}" src="${im.src}" style="max-width:100%;max-height:260px"><figcaption>${hx(im.cap)}</figcaption></figure>`:""};
   let x=`<h4 style="margin:0 0 6px">Podsumowanie modułu</h4><p>Odpowiedzi: ${ids.length}, poprawne: ${ids.length-zle.length}, błędne: ${zle.length}.</p>`;
-  x+=zle.map(id=>{const q=QBY[id],h=HIST.find(z=>z.q.includes(id)),a=L[id].j;
+  x+=zle.map(id=>{const q=QBY[id],h=HIST.find(z=>z.m===m&&z.q.includes(id))||HIST.find(z=>z.q.includes(id)),a=L[id].j;
     return `<div style="border-top:1px solid #ddd;padding-top:6px;margin-top:6px"><p><b>Pytanie:</b> ${hx(q.q)}</p><p style="color:#b91c1c"><b>Twoja odpowiedź (źle):</b> ${"abc"[a]}) ${hx(q.a[a])}</p>`+
       `<p style="color:#14532d"><b>Poprawna odpowiedź (dobrze):</b> ${"abc"[q.k]}) ${hx(q.a[q.k])}</p><p><b>Dlaczego:</b> ${hx(q.why||"")}</p>`+
       (h?`<p><b>Co się dzieje, gdy tak się nie postąpi:</b> ${hx(h.s)}</p>`+(h.w&&!(q.why||"").startsWith(h.w.slice(0,60))?`<p><b>Zasada:</b> ${hx(h.w)}</p>`:"")+fig(h):"")+`</div>`}).join("");
@@ -4870,11 +4870,11 @@ function hqSum(m){const d=document.querySelector(`details.hist[data-m="${m}"]`);
     x+=za>0?`<p class="muted">Powtórka modułu bez podpowiedzi będzie dostępna za ${za} min.</p>`:`<button type="button" class="hpowt">Powtórz moduł bez podpowiedzi</button>`}
   if(P.proby.length){const n=P.proby.length,o=P.proby[n-1];x+=`<p><b>Powtórki:</b> ${n}; ostatni wynik ${o.ok}/${o.z} – ${o.ok===o.z?"pełny wynik":"do powtórzenia"}; punkty łącznie: ${P.proby.reduce((s,r)=>s+r.ok,0)}.</p>`}
   s.innerHTML=x;const b=s.querySelector(".hpowt");if(b)b.onclick=()=>hqPowtorka(m,s)}
-function hqPowtorka(m,s){const ids=HIST.filter(h=>h.m===m).flatMap(h=>h.q).filter(id=>QBY[id]);const odp={};
+function hqPowtorka(m,s){const ids=[...new Set(HIST.filter(h=>h.m===m).flatMap(h=>h.q).filter(id=>QBY[id]))];const odp={};
   s.innerHTML=`<h4 style="margin:0 0 6px">Powtórka modułu (bez podpowiedzi)</h4>`+ids.map((id,i)=>`<div class="hpq" data-q="${hx(id)}" style="margin:6px 0"><div>${i+1}. ${hx(QBY[id].q)}</div>`+
-    QBY[id].a.map((a,j)=>`<button type="button" class="opt" data-j="${j}">${"abc"[j]}) ${hx(a)}</button>`).join("")+`</div>`).join("")+`<button type="button" class="hkoniec" disabled>Sprawdź wynik</button>`;
+    QBY[id].a.map((a,j)=>`<button type="button" class="opt" data-j="${j}" aria-pressed="false">${"abc"[j]}) ${hx(a)}</button>`).join("")+`</div>`).join("")+`<button type="button" class="hkoniec" disabled>Sprawdź wynik</button>`;
   s.querySelectorAll(".hpq").forEach(el=>el.querySelectorAll("button.opt").forEach(b=>b.onclick=()=>{odp[el.dataset.q]=+b.dataset.j;
-    el.querySelectorAll("button.opt").forEach(z=>z.classList.toggle("sel",z===b));s.querySelector(".hkoniec").disabled=Object.keys(odp).length<ids.length}));
+    el.querySelectorAll("button.opt").forEach(z=>{const w=z===b;z.classList.toggle("sel",w);z.setAttribute("aria-pressed",String(w));z.style.outline=w?"3px solid #14532d":"";z.style.fontWeight=w?"700":"";z.textContent=z.textContent.replace(/^✔ /,"");if(w)z.textContent="✔ "+z.textContent});s.querySelector(".hkoniec").disabled=Object.keys(odp).length<ids.length}));
   s.querySelector(".hkoniec").onclick=()=>{const P=HQ_POWT[m]=HQ_POWT[m]||{proby:[],od:0};const L=HQ_LOG[m]=HQ_LOG[m]||{};let ok=0;
     ids.forEach(id=>{const t=odp[id]===QBY[id].k;if(t)ok++;L[id]={j:odp[id],ok:t,t:Date.now()}});P.proby.push({ok,z:ids.length,t:new Date().toISOString()});
     if(ok<ids.length)P.od=Date.now()+HQ_MIN*60000;hqSum(m);hqZapisz(m,P)}}
@@ -4882,7 +4882,7 @@ async function hqZapisz(m,P){const L=window.WWW_LOGIN;if(!L||!L.kod||!L.sha||!/^
   try{const r=await fetch("zapis.json",{cache:"no-store"});const u=r.ok?String((await r.json()).url||""):"";if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u))return;
     await fetch(u,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({typ:"postep_modulu",kod_osoby:L.kod,pin_skrot:L.sha,modul:m,proba:P.proby.length,poprawne:o.ok,pytan:o.z,punkty:P.proby.reduce((s,x)=>s+x.ok,0),strona:location.origin+location.pathname})})}catch(x){}}
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest(".hq button.opt");if(!b||b.disabled)return;const el=b.closest(".hq"),id=el.dataset.q,q=QBY[id];if(!q)return;
-  const m=hqModul(id);if(!m)return;const j=+b.dataset.j,ok=j===q.k;(HQ_LOG[m]=HQ_LOG[m]||{})[id]={j,ok,t:Date.now()};
+  const m=(el.closest("details.hist")&&el.closest("details.hist").dataset.m)||hqModul(id);if(!m)return;const j=+b.dataset.j,ok=j===q.k;(HQ_LOG[m]=HQ_LOG[m]||{})[id]={j,ok,t:Date.now()};
   const P=HQ_POWT[m]=HQ_POWT[m]||{proby:[],od:0};if(!ok)P.od=Date.now()+HQ_MIN*60000;setTimeout(()=>hqSum(m),0)},true);
 setInterval(()=>Object.keys(HQ_LOG).forEach(m=>{const s=document.querySelector(`details.hist[data-m="${m}"] .hsum`);if(s&&!s.querySelector(".hpq"))hqSum(m)}),30000);
 /*PODSUMOWANIE-BLEDOW-KONIEC*/
