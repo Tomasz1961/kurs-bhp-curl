@@ -4,7 +4,9 @@ musi wskazywać plik istniejący w repozytorium.
 Znaczniki czyta parser HTML (atrybuty href/src w cudzysłowach podwójnych, pojedynczych i bez cudzysłowów;
 także <script src>, <link href>, <img src>). Odnośniki składane w skryptach strony (href="…"/href='…' w tekście skryptu)
 są czytane osobno; odnośniki z wstawkami ${…} albo sklejane operatorem + są pomijane, bo powstają dopiero w przeglądarce.
-Strona pełna jest szyfrowana; jej odnośniki do kart charakterystyki (../sds/) sprawdza budowa przed szyfrowaniem.
+Strona pełna jest szyfrowana; jej odnośniki do kart charakterystyki sprawdza budowa przed szyfrowaniem.
+Od 19.11.2026 (karty charakterystyki tylko po zalogowaniu) strona publiczna nie może mieć żadnego odnośnika do kart (sds/);
+MIN_SDS (domyślnie 0) zostaje dla innych plików podanych w argumencie.
 Użycie: sprawdz_odnosniki.py [plik_html [katalog_główny]] (domyślnie index.html repozytorium)."""
 import os, re, sys, html
 from html.parser import HTMLParser
@@ -44,5 +46,7 @@ brak = sorted(c for c in cele if not istnieje(c))
 sds = sorted(c for c in cele if c.startswith('sds/'))
 print(f'odnośników względnych: {len(cele)}, w tym kart charakterystyki: {len(sds)}, brakujących plików: {len(brak)}')
 for b in brak: print('  BRAK:', b)
-min_sds = int(os.environ.get('MIN_SDS', '20'))
-sys.exit(1 if brak or len(sds) < min_sds else 0)
+min_sds = int(os.environ.get('MIN_SDS', '0'))
+publiczna = os.path.abspath(PLIK) == os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'index.html')
+if publiczna and sds: print('  BŁĄD: strona publiczna ma odnośniki do kart charakterystyki:', sds[:5])
+sys.exit(1 if brak or len(sds) < min_sds or (publiczna and sds) else 0)

@@ -1,0 +1,51 @@
+# Publikacja strony aplikacji CURL na GitHub Pages (polecenie TS 19.11.2026: karty charakterystyki tylko po zalogowaniu,
+# testy i README poza stroną). Publikowane są wszystkie pliki poza .git, .github, tests/ i README.md; przed publikacją
+# sprawdzenie: żadnego jawnego PDF i żadnego pliku spoza listy dozwolonych (ta sama lista co W-07 w teście wydania).
+# Wymaga Settings → Pages → Source: „GitHub Actions”.
+name: Publikacja strony
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  publikacja:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.wdrozenie.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Złożenie plików do publikacji
+        run: |
+          mkdir _site
+          rsync -a --exclude .git --exclude .github --exclude tests --exclude README.md --exclude _site ./ _site/
+      - name: Sprawdzenie – brak jawnych PDF i plików spoza listy dozwolonych
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          W = r'(?:wersja-\d{4}-\d\d-\d\d/)?'
+          D = re.compile(W + r'(?:(?:pelny|pracownik|pelny/aplikacja)/)?zapis\.json|\.nojekyll|index\.html|' + W
+                         + r'(?:pelny|pracownik|pelny/aplikacja)/index\.html|' + W + r'(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin')
+          zle = []
+          for k, _, pl in os.walk('_site'):
+              for f in pl:
+                  r = os.path.relpath(os.path.join(k, f), '_site').replace(os.sep, '/')
+                  d = open(os.path.join(k, f), 'rb').read(1024)
+                  if not D.fullmatch(r): zle.append(r + ': plik spoza listy dozwolonych')
+                  elif b'%PDF-' in d: zle.append(r + ': jawny PDF')
+          print('\n'.join(zle) or 'OK: tylko pliki dozwolone, żadnego jawnego PDF')
+          sys.exit(1 if zle else 0)
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: wdrozenie
+        uses: actions/deploy-pages@v4

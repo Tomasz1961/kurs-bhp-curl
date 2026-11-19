@@ -1,10 +1,18 @@
-# Kurs BHP CURL (wersja publiczna)
+# Aplikacja CURL – strony www
 
-Szkolenie BHP dla pracowników Centrum Uprawy Roślin Leczniczych IUNG-PIB.
+Aplikacja CURL Centrum Uprawy Roślin Leczniczych IUNG-PIB w Sarnowie.
 Strona: https://tomasz1961.github.io/kurs-bhp-curl/
 
-Wersja publiczna: wynik testu nie zapisuje się w rejestrze szkoleń; protokół pobiera się lub drukuje i przekazuje prowadzącemu.
+Strona publiczna pokazuje tylko informację o aplikacji i dwa przyciski logowania. Treść szkoleń, testy, zarządzanie BHP
+i karty charakterystyki są wyłącznie w zaszyfrowanych stronach /pelny/ i /pracownik/ (otwierają się hasłem strony).
+Karty charakterystyki są zaszyfrowane (pliki <strona>/sds/*.bin) i otwierają się dopiero po zalogowaniu.
+
+Publikacja: przepływ .github/workflows/strona.yml publikuje wszystkie pliki poza .git, .github, tests/ i README.md
+i zatrzymuje publikację, jeśli znajdzie jawny plik PDF albo plik spoza listy dozwolonych. Wymaga ustawienia
+Settings → Pages → Source: „GitHub Actions”.
 
 ## Wcześniejsza wersja
 
-Wersja z 18.11.2026 (wydanie przed 19.11.2026) pozostaje do wglądu pod adresem https://tomasz1961.github.io/kurs-bhp-curl/wersja-2026-11-18/ – kopia bez zmian z commita c608686. Bieżąca wersja jest zawsze pod adresem głównym.
+Zaszyfrowane strony wersji z 18.11.2026 pozostają pod adresami wersja-2026-11-18/pelny/ i wersja-2026-11-18/pracownik/.
+Jawna strona tej wersji i jawne karty charakterystyki zostały usunięte z publikacji (polecenie z 19.11.2026: karty
+charakterystyki i treść tylko po zalogowaniu).
