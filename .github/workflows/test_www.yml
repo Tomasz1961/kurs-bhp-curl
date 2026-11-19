@@ -32,6 +32,16 @@ jobs:
         run: python3 tests/test_negatywny_odnosniki.py && python3 tests/sprawdz_odnosniki.py
       - name: Kontrola języka (ten sam sprawdzacz i ta sama lista co lokalnie; dec. 128)
         run: node tests/render_zakladki.js "$PWD/index.html" teksty_www.json && python3 tests/sprawdz_jezyk.py teksty_www.json tests/jezyk_lista.json --pokaz
+      - name: Strona na żywo bez plików wewnętrznych (karty tylko zaszyfrowane; testy i README poza stroną; polecenie z 19.11.2026)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          U=https://tomasz1961.github.io/kurs-bhp-curl/
+          B=$(ls pelny/sds | head -1); K=${B%.bin}
+          zle=0
+          for p in "" "pelny/sds/$B"; do c=$(curl -s -o /dev/null -w '%{http_code}' "$U$p"); echo "$c $p (oczekiwane 200)"; [ "$c" = 200 ] || zle=1; done
+          for p in "sds/$K" "pelny/sds/$K" "README.md" "tests/test_www.js" "wersja-2026-11-18/index.html" ".github/workflows/strona.yml"; do
+            c=$(curl -s -o /dev/null -w '%{http_code}' "$U$p"); echo "$c $p (oczekiwane 404)"; [ "$c" = 404 ] || zle=1; done
+          [ $zle = 0 ] || { echo "Na stronie są pliki, których nie powinno być (albo źródło Pages nie jest ustawione na GitHub Actions)"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
