@@ -2,6 +2,7 @@ name: Test strony www kursu
 on:
   push:
     branches: [main, 'odbior-*']
+  pull_request:
   workflow_dispatch:
 jobs:
   test:
@@ -13,11 +14,17 @@ jobs:
           node-version: 20
       - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
       - name: Czekaj na wdrożenie Pages
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: sleep 90
-      - name: Test strony na żywo (na gałęzi odbior-* sprawdza stronę już opublikowaną)
+      - name: Lokalny serwer z plikami gałęzi (prośba o scalenie – test przed scaleniem, nie strona na żywo)
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 -m http.server 8000 > /dev/null 2>&1 &
+          sleep 2
+          echo "URL=http://localhost:8000/" >> "$GITHUB_ENV"
+      - name: Test strony (push – strona na żywo; prośba o scalenie – pliki gałęzi z lokalnego serwera)
         run: node tests/test_www.js
-      - name: Test negatywny strony na żywo (z włączonym zapisem test MUSI dać BŁĄD)
+      - name: Test negatywny (strona publiczna z dopisanym testem, polem PIN i zapisem – test MUSI dać BŁĄD)
         run: |
           if TRYB=negatywny node tests/test_www.js > neg.log; then echo "Test nie wykrył włączonego zapisu"; cat neg.log; exit 1; fi
           grep -q '"WYNIK": "BŁĄD"' wynik_testu_negatywnego.json && grep -q 'TEST_NEGATYWNY' wynik_testu_negatywnego.json && echo "test negatywny strony: wykryto włączony zapis (POST zablokowany)"
