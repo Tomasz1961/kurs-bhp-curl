@@ -67,8 +67,8 @@ jobs:
         with:
           node-version: 20
       - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
-      - name: Test zachowania strony na żywo w przeglądarce
-        run: node tests/test_www.js
+      - name: Test zachowania strony na żywo w przeglądarce (adres zawsze z ukośnikiem na końcu – ścieżki względne w obrębie projektu)
+        run: URL="${URL%/}/" node tests/test_www.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:
