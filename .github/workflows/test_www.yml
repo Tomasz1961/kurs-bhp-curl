@@ -30,6 +30,8 @@ jobs:
           grep -q '"WYNIK": "BŁĄD"' wynik_testu_negatywnego.json && grep -q 'TEST_NEGATYWNY' wynik_testu_negatywnego.json && echo "test negatywny strony: wykryto włączony zapis (POST zablokowany)"
       - name: Kontrola odnośników (pliki kart charakterystyki i inne odnośniki względne; audyt 15.11.2026 C-04)
         run: python3 tests/test_negatywny_odnosniki.py && python3 tests/sprawdz_odnosniki.py
+      - name: Test negatywny sprawdzenia publikacji (dowiązania symboliczne i jawny PDF; uwaga przeglądu #31)
+        run: python3 .github/skrypty/sprawdz_publikacje.py --negatywny
       - name: Kontrola języka (ten sam sprawdzacz i ta sama lista co lokalnie; dec. 128)
         run: node tests/render_zakladki.js "$PWD/index.html" teksty_www.json && python3 tests/sprawdz_jezyk.py teksty_www.json tests/jezyk_lista.json --pokaz
       - name: Strona na żywo bez plików wewnętrznych (karty tylko zaszyfrowane; testy i README poza stroną; polecenie z 19.11.2026)

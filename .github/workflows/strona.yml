@@ -1,6 +1,7 @@
 # Publikacja strony aplikacji CURL na GitHub Pages (polecenie TS 19.11.2026: karty charakterystyki tylko po zalogowaniu,
 # testy i README poza stroną). Publikowane są wszystkie pliki poza .git, .github, tests/ i README.md; przed publikacją
-# sprawdzenie: żadnego jawnego PDF i żadnego pliku spoza listy dozwolonych (ta sama lista co W-07 w teście wydania).
+# sprawdzenie (.github/skrypty/sprawdz_publikacje.py): żadnego dowiązania symbolicznego, jawnego PDF ani pliku spoza listy
+# dozwolonych (ta sama lista co W-07 w teście wydania).
 # Wymaga Settings → Pages → Source: „GitHub Actions”.
 name: Publikacja strony
 on:
@@ -22,27 +23,19 @@ jobs:
       url: ${{ steps.wdrozenie.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Brak dowiązań symbolicznych w repozytorium (publikacja rozwija dowiązania; uwaga przeglądu #31)
+        run: |
+          d=$(find . -path ./.git -prune -o -type l -print)
+          if [ -n "$d" ]; then echo "Dowiązania symboliczne – publikacja zatrzymana:"; echo "$d"; exit 1; fi
+          echo "OK: brak dowiązań symbolicznych"
+      - name: Test negatywny sprawdzenia publikacji (dowiązania i jawny PDF muszą być wykryte)
+        run: python3 .github/skrypty/sprawdz_publikacje.py --negatywny
       - name: Złożenie plików do publikacji
         run: |
           mkdir _site
-          rsync -a --exclude .git --exclude .github --exclude tests --exclude README.md --exclude _site ./ _site/
-      - name: Sprawdzenie – brak jawnych PDF i plików spoza listy dozwolonych
-        run: |
-          python3 - <<'PY'
-          import os, re, sys
-          W = r'(?:wersja-\d{4}-\d\d-\d\d/)?'
-          D = re.compile(W + r'(?:(?:pelny|pracownik|pelny/aplikacja)/)?zapis\.json|\.nojekyll|index\.html|' + W
-                         + r'(?:pelny|pracownik|pelny/aplikacja)/index\.html|' + W + r'(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin')
-          zle = []
-          for k, _, pl in os.walk('_site'):
-              for f in pl:
-                  r = os.path.relpath(os.path.join(k, f), '_site').replace(os.sep, '/')
-                  d = open(os.path.join(k, f), 'rb').read(1024)
-                  if not D.fullmatch(r): zle.append(r + ': plik spoza listy dozwolonych')
-                  elif b'%PDF-' in d: zle.append(r + ': jawny PDF')
-          print('\n'.join(zle) or 'OK: tylko pliki dozwolone, żadnego jawnego PDF')
-          sys.exit(1 if zle else 0)
-          PY
+          rsync -a --no-links --exclude .git --exclude .github --exclude tests --exclude README.md --exclude _site ./ _site/
+      - name: Sprawdzenie – bez dowiązań, brak jawnych PDF i plików spoza listy dozwolonych
+        run: python3 .github/skrypty/sprawdz_publikacje.py _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
