@@ -3,6 +3,9 @@
 # sprawdzenie (.github/skrypty/sprawdz_publikacje.py): żadnego dowiązania symbolicznego, jawnego PDF ani pliku spoza listy
 # dozwolonych (ta sama lista co W-07 w teście wydania).
 # Wymaga Settings → Pages → Source: „GitHub Actions”.
+# Po wdrożeniu (job weryfikacja_www, needs: publikacja – także przy ręcznym uruchomieniu) sprawdzenie strony na żywo:
+# każda z kart pelny/sds/*.bin zaszyfrowana = 200, jej jawna wersja w sds/ i pelny/sds/ = 404, pliki wewnętrzne = 404,
+# oraz test zachowania strony w przeglądarce (uwagi przeglądu PR #32, 20.11.2026: bez „sleep 90”, bez „head -1”).
 name: Publikacja strony
 on:
   push:
@@ -21,6 +24,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.wdrozenie.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.wdrozenie.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Brak dowiązań symbolicznych w repozytorium (publikacja rozwija dowiązania; uwaga przeglądu #31)
@@ -42,3 +47,32 @@ jobs:
           path: _site
       - id: wdrozenie
         uses: actions/deploy-pages@v4
+
+  weryfikacja_www:
+    name: Weryfikacja strony na żywo po wdrożeniu
+    needs: publikacja
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      URL: ${{ needs.publikacja.outputs.page_url || 'https://tomasz1961.github.io/kurs-bhp-curl/' }}
+    steps:
+      - name: Lista zaszyfrowanych kart z wdrożonego commita
+        uses: actions/checkout@v4
+      - name: Test negatywny sprawdzenia (jawna karta inna niż pierwsza, w sds/ i pelny/sds/, MUSI dać błąd)
+        run: bash .github/skrypty/sprawdz_strone_na_zywo.sh --negatywny .
+      - name: Strona na żywo bez plików wewnętrznych i jawnych kart (wszystkie karty, obie dawne ścieżki)
+        run: bash .github/skrypty/sprawdz_strone_na_zywo.sh "$URL" .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
+      - name: Test zachowania strony na żywo w przeglądarce (adres zawsze z ukośnikiem na końcu – ścieżki względne w obrębie projektu)
+        run: URL="${URL%/}/" node tests/test_www.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wynik-testu-www-na-zywo
+          path: |
+            wynik_testu.json
+            wynik_*.pdf
