@@ -13,6 +13,6 @@ Settings → Pages → Source: „GitHub Actions”.
 
 ## Wcześniejsza wersja
 
-Zaszyfrowane strony wersji z 18.11.2026 pozostają pod adresami wersja-2026-11-18/pelny/ i wersja-2026-11-18/pracownik/.
+Zaszyfrowana strona wersji z 18.11.2026 pozostaje tylko pod adresem wersja-2026-11-18/pelny/. Wersję dla pracowników z 18.11.2026 usunięto 22.11.2026, bo zawierała dane osobowe wszystkich osób.
 Jawna strona tej wersji i jawne karty charakterystyki zostały usunięte z publikacji (polecenie z 19.11.2026: karty
 charakterystyki i treść tylko po zalogowaniu).
