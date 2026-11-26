@@ -17,7 +17,7 @@
 #       żadnego osadzonego PDF; N-03 test negatywny: podłożony rekord KARTAOS, dopisana osoba DOKPOD i osadzony PDF są wykryte
 #  N-02 test negatywny: W-07 wykrywa podłożony jawny PDF, jawny PDF udający .bin, dowiązanie symboliczne do PDF i jawną stronę z treścią
 # Wynik: wiersze w polecenie_kontrola_wynik (polecenie D-186, nr 0); kod ≠ 0 = STOP wydania.
-import os, sys, re, json, base64, hashlib, sqlite3, subprocess, datetime, tempfile
+import os, sys, re, json, base64, hashlib, sqlite3, subprocess, datetime, tempfile, importlib.util, shutil
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -77,7 +77,8 @@ wynik('W-06', not jawne, 'brak jawnych haseł w plikach strony' + (f': {jawne}' 
 POMIJANE = {'.git', '.github', 'tests', 'README.md'}
 DOZWOLONE = re.compile(r'(?:wersja-\d{4}-\d\d-\d\d/)?(?:(?:pelny|pracownik|pelny/aplikacja)/)?(?:zapis\.json)'
                        r'|\.nojekyll|index\.html|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik|pelny/aplikacja)/index\.html'
-                       r'|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin')
+                       r'|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin'
+                       r'|przypomnienia/[a-z_]+/index\.html')  # strony przypomnień obszarów (TS 24.11.2026), zaszyfrowane – sprawdza W-07 i W-08p
 def nieszyfrowane(repo):
     b = []
     for kat, podk, pliki in os.walk(repo):
@@ -158,6 +159,42 @@ try:
     wynik('N-03', all(_n3) and 'window.KARTAOS={' in _dp, f'test negatywny W-08 wykrywa rekord KARTAOS, osobę DOKPOD, PDF i kategorię zaszeregowania: {_n3}')
 except Exception as e:
     wynik('W-08', False, f'nie sprawdzono strony /pracownik/: {e}')
+
+# W-08p (TS 24.11.2026, strony przypomnień obszarów): każdy plik przypomnienia/*/index.html otwiera się hasłem swojego obszaru (HASLA_PRZYP)
+# i nie zawiera danych osobowych z kart ani płac; liczba stron = liczba haseł; plik, którego nie da się sprawdzić, daje STOP
+_hp = json.loads(os.environ.get('HASLA_PRZYP') or '{}')
+_sl = {re.sub(r'^S_', '', k).lower(): v for k, v in _hp.items()}
+_pp = sorted(d for d in (os.listdir(f'{REPO}/przypomnienia') if os.path.isdir(f'{REPO}/przypomnienia') else []))
+_rp = []
+for _d in _pp:
+    try:
+        _sp = importlib.util.spec_from_file_location('szp', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'szyfruj_przypomnienia_www.py'))
+        _szp = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_szp)
+        if not _szp.zgodny_z_ladowaczem(open(f'{REPO}/przypomnienia/{_d}/index.html', encoding='utf-8').read()):   # uwaga przeglądu #44 (r3)
+            _rp.append(f'{_d}: strona różna od ładowacza (jawny tekst poza szyfrem?)')
+        _doc = odszyfruj(f'{REPO}/przypomnienia/{_d}/index.html', _sl[_d])['doc']
+        _rp += [f'{_d}: {x}' for x in rekordy_osobowe(_doc)]
+        _rp += [f'{_d}: {w}' for w in _szp.kontrola([_d], {_d: 'x' * 12}, {_d: hashlib.sha256(b'x' * 12).hexdigest()}, {_d: _doc}, ('a', 'b')) if w.startswith('PR-03')]
+    except Exception as e: _rp.append(f'{_d}: nie da się sprawdzić ({type(e).__name__})')
+wynik('W-08p', bool(_pp) and sorted(_sl) == _pp and not _rp,   # uwaga przeglądu #44: brak stron albo haseł = STOP
+      f'strony przypomnień ({len(_pp)}: {", ".join(_pp)}; haseł {len(_hp)}) zaszyfrowane hasłem obszaru, bez danych osobowych i płac' + (': ' + '; '.join(_rp) if _rp else ''))
+# W-07g (26.11.2026, kontroler po scaleniu #43: publikacja na GitHubie STOP przy lokalnym ZGODNE): to samo sprawdzenie, które wykonuje
+# workflow publikacji (.github/skrypty/sprawdz_publikacje.py z repozytorium strony), na tych samych plikach co publikacja
+# (bez .git, .github, tests/, README.md) oraz jego test negatywny – jeden wynik lokalnie i na GitHubie.
+_spub = f'{REPO}/.github/skrypty/sprawdz_publikacje.py'
+if os.path.isfile(_spub):
+    with tempfile.TemporaryDirectory() as _T:
+        _T = os.path.join(_T, 'site'); shutil.copytree(REPO, _T, symlinks=True, ignore=shutil.ignore_patterns('.git'))   # drzewo robocze = to, co pójdzie do commita
+        for _x in ('.github', 'tests', 'README.md'):
+            _px = os.path.join(_T, _x)
+            if os.path.isdir(_px): shutil.rmtree(_px)
+            elif os.path.exists(_px): os.remove(_px)
+        _g1 = subprocess.run([sys.executable, '-I', _spub, _T], capture_output=True, text=True)
+        _g2 = subprocess.run([sys.executable, '-I', _spub, '--negatywny'], capture_output=True, text=True)
+    wynik('W-07g', _g1.returncode == 0 and _g2.returncode == 0,
+          'sprawdzenie publikacji z workflow strony: ' + (_g1.stdout.strip().splitlines() or ['?'])[-1] + ' | ' + (_g2.stdout.strip().splitlines() or ['?'])[-1])
+else:
+    wynik('W-07g', False, 'brak .github/skrypty/sprawdz_publikacje.py w repozytorium strony')
 
 czas = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
 sha = hashlib.sha256(open(f'{REPO}/pelny/index.html', 'rb').read()).hexdigest()
