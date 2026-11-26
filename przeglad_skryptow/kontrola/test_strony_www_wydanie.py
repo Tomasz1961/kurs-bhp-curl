@@ -77,7 +77,8 @@ wynik('W-06', not jawne, 'brak jawnych haseł w plikach strony' + (f': {jawne}' 
 POMIJANE = {'.git', '.github', 'tests', 'README.md'}
 DOZWOLONE = re.compile(r'(?:wersja-\d{4}-\d\d-\d\d/)?(?:(?:pelny|pracownik|pelny/aplikacja)/)?(?:zapis\.json)'
                        r'|\.nojekyll|index\.html|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik|pelny/aplikacja)/index\.html'
-                       r'|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin')
+                       r'|(?:wersja-\d{4}-\d\d-\d\d/)?(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin'
+                       r'|przypomnienia/[a-z_]+/index\.html')  # strony przypomnień obszarów (TS 24.11.2026), zaszyfrowane – sprawdza W-07 i W-08p
 def nieszyfrowane(repo):
     b = []
     for kat, podk, pliki in os.walk(repo):
@@ -158,6 +159,21 @@ try:
     wynik('N-03', all(_n3) and 'window.KARTAOS={' in _dp, f'test negatywny W-08 wykrywa rekord KARTAOS, osobę DOKPOD, PDF i kategorię zaszeregowania: {_n3}')
 except Exception as e:
     wynik('W-08', False, f'nie sprawdzono strony /pracownik/: {e}')
+
+# W-08p (TS 24.11.2026, strony przypomnień obszarów): każdy plik przypomnienia/*/index.html otwiera się hasłem swojego obszaru (HASLA_PRZYP)
+# i nie zawiera danych osobowych z kart ani płac; liczba stron = liczba haseł; plik, którego nie da się sprawdzić, daje STOP
+_hp = json.loads(os.environ.get('HASLA_PRZYP') or '{}')
+_sl = {re.sub(r'^S_', '', k).lower(): v for k, v in _hp.items()}
+_pp = sorted(d for d in (os.listdir(f'{REPO}/przypomnienia') if os.path.isdir(f'{REPO}/przypomnienia') else []))
+_rp = []
+for _d in _pp:
+    try:
+        _doc = odszyfruj(f'{REPO}/przypomnienia/{_d}/index.html', _sl[_d])['doc']
+        _rp += [f'{_d}: {x}' for x in rekordy_osobowe(_doc)]
+        _rp += [f'{_d}: {m}' for m in sorted(set(re.findall(r'(?i)KARTAOS|DOKPOD|PESEL|wynagrodz\w*|zaszeregowan\w*', _doc)))]
+    except Exception as e: _rp.append(f'{_d}: nie da się sprawdzić ({type(e).__name__})')
+wynik('W-08p', (not _pp and not _hp) or (sorted(_sl) == _pp and not _rp),
+      f'strony przypomnień ({len(_pp)}: {", ".join(_pp)}; haseł {len(_hp)}) zaszyfrowane hasłem obszaru, bez danych osobowych i płac' + (': ' + '; '.join(_rp) if _rp else ''))
 
 czas = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
 sha = hashlib.sha256(open(f'{REPO}/pelny/index.html', 'rb').read()).hexdigest()

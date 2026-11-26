@@ -109,7 +109,7 @@ APLIKACJA_BAZA=$A/aplikacja_curl.sqlite python3 -I $PF/adm/skrypty/build_przypom
 [ "$(find "$PRZYP" -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -ge 1 ] || stop 6 "przypomnienia: brak stron obszarów w katalogu roboczym"
 case "$PRZYP" in "$REPO_WWW"*) stop 6 "przypomnienia: katalog jawny wewnątrz REPO_WWW";; esac
 export PRZYPOMNIENIA_JAWNE="$PRZYP"
-( cd $B/skrypty && export APLIKACJA_BAZA=$A/aplikacja_curl.sqlite && python3 build_wersja_www.py && cp "$B/www/index.html" "$REPO_WWW/index.html" && python3 build_wersja_www_pelna.py "$REPO_WWW" && TRYB_WWW=pracownik HASLO_WWW="${HASLO_WWW_PRAC:?brak HASLO_WWW_PRAC}" python3 build_wersja_www_pelna.py "$REPO_WWW" && APLIKACJA_WWW_ZRODLO="$ZEST" python3 build_aplikacja_www.py "$REPO_WWW" ) >> "$LOG" 2>&1 \
+( cd $B/skrypty && export APLIKACJA_BAZA=$A/aplikacja_curl.sqlite && python3 build_wersja_www.py && cp "$B/www/index.html" "$REPO_WWW/index.html" && python3 build_wersja_www_pelna.py "$REPO_WWW" && TRYB_WWW=pracownik HASLO_WWW="${HASLO_WWW_PRAC:?brak HASLO_WWW_PRAC}" python3 build_wersja_www_pelna.py "$REPO_WWW" && APLIKACJA_WWW_ZRODLO="$ZEST" python3 build_aplikacja_www.py "$REPO_WWW" && PRZYPOMNIENIA_JAWNE="${PRZYPOMNIENIA_JAWNE:?brak PRZYPOMNIENIA_JAWNE}" REPO_WWW="$REPO_WWW" HASLA_PRZYP="${HASLA_PRZYP:?brak HASLA_PRZYP}" python3 szyfruj_przypomnienia_www.py ) >> "$LOG" 2>&1 \
   || stop 6 "składanie stron www"
 python3 -I $A/kopia_wejsc.py "$WEJ" --sprawdz >> "$LOG" 2>&1 || stop 6 "dane części zmieniły się w trakcie składania stron: $(grep -m2 '^STOP' "$LOG" | tail -1 | cut -c1-200)"
 echo "6 STRONY WWW złożone z danych równych jednej bazie" | tee -a "$LOG"
