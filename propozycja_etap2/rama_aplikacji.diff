@@ -1,0 +1,181 @@
+--- /mnt/project-files/bhp/skrypty/rama_aplikacji.py	2026-11-22 20:05:40.535550000 +0000
++++ rama_aplikacji.py	2026-11-26 19:37:23.791246059 +0000
+@@ -24,9 +24,15 @@
+ # sekcje Wiedzy z części zarządzania BHP (fragment MANIFEST): wiersz układu → fragment; „pomieszczenia” po „mapa”
+ WIEDZA_FRAGMENT = {'mapa': 'mapa', 'strefy': 'srodki'}
+ # powrót ← z dokumentu do ekranu części (N-08); przewijanie dokumentu tylko z listy wyjątków (N-02, przewijanie_wyjatek)
+-RODZIC = {'SZKOLENIE': '#programy', 'WIEDZA': '#wiedza', 'ZARZADZANIE': '#zarzadzanie', 'KONTO': '#konto'}
++RODZIC = {'SZKOLENIE': '#programy', 'WIEDZA': '#wiedza', 'ZARZADZANIE': '#bhp/ludzie', 'SPRAWY': '#sprawy', 'KONTO': '#konto'}
++# Etap 2 (TS 26.11.2026 19:30 UTC, W-319/Z-380, propozycja – bez wydania): BHP w jednym oknie. Jedno menu ramy:
++# Szkolenie, Wiedza BHP, BHP (Mapa obiektu, Środki ochrony, Pracownicy i dokumenty), Moje sprawy, Konto, Alarm.
++# Strony części zarządzania BHP (/pelny/aplikacja/*.html) są pokazywane wewnątrz ramy (ekran #bhp/<strona>), bez ich paska.
++BHP_STRONY = (('mapa', 'mapa.html'), ('srodki', 'srodki.html'), ('ludzie', 'ludzie.html'))
++BHP_LUDZIE_STRONY = ('szkolenia.html', 'dokumenty.html')   # dalsze strony „Pracownicy i dokumenty”
++BHP_DUBLE_WIEDZY = ('mapa', 'pomieszczenia', 'srodki')     # fragmenty obiektu w Wiedzy, które dla podglądu są już w BHP
+ PRZEWIJANIE = {'ZARZADZANIE': 'tabela'}
+-EKRANY = ('szkolenie', 'temat', 'programy', 'wiedza', 'zarzadzanie', 'konto')
++EKRANY = ('szkolenie', 'temat', 'programy', 'wiedza', 'bhp', 'sprawy', 'konto')
+ 
+ 
+ def _projekt():
+@@ -146,12 +152,16 @@
+ nav.dol a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-decoration:none;color:var(--r-muted);font-size:13px;font-weight:600;min-height:56px;min-width:0;text-align:center}
+ nav.dol a .i{font-size:22px;line-height:1.2}nav.dol a.akt{color:var(--r-primary)}nav.dol a.akt .i{background:var(--r-primary_bg);border-radius:99px;padding:0 14px}
+ nav.dol a.alarm{color:var(--r-surface);background:var(--r-fire);margin:6px;border-radius:12px}
++nav.dol a .kr{display:block}nav.dol a .dl,nav.dol a.pod{display:none}
++.bhp-ramka{display:block;width:100%;border:0;min-height:60vh;background:var(--r-surface)}
+ a:focus-visible,button:focus-visible{outline:3px solid var(--r-mand);outline-offset:2px}
+ .pasek a:focus-visible,nav.dol a.alarm:focus-visible{outline:3px solid var(--r-surface);box-shadow:0 0 0 5px var(--r-ink)}
+ @media(min-width:840px){
+  nav.dol{top:56px;bottom:0;right:auto;width:240px;height:auto;display:flex;flex-direction:column;justify-content:flex-start;padding:8px 0;border-top-width:0;border-right:1px solid var(--r-line)}
+  nav.dol a{flex-direction:row;justify-content:flex-start;gap:12px;padding:0 16px;min-height:52px;font-size:16px;text-align:left}
+  nav.dol a.alarm{order:-1;margin:4px 12px 12px;justify-content:center}
++ nav.dol a .dl{display:block}nav.dol a .kr{display:none}
++ nav.dol a.pod{display:flex;min-height:40px;padding-left:52px;font-size:15px;font-weight:500}nav.dol a.pod.akt{background:var(--r-primary_bg)}
+  .wrap{margin:0 0 0 264px!important;padding-bottom:24px!important}
+ }
+ /* przy bardzo niskim oknie i powiększeniu paski nie zasłaniają treści (N-03) */
+@@ -253,7 +263,7 @@
+ /* zapamiętanie, skąd otwarto ekran (← i ✕ wracają tam, nie do historii przeglądarki; N-08) */
+ document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest(".ekran_ramy a[href^='#'],.rama_koniec a[href^='#']");if(!a)return;
+  const id=a.getAttribute("href").slice(1).split("/")[0];if(id&&!R.ekrany.includes(id))SS.set("rama_skad",{id,wroc:location.hash||"#"+start()})});
+-const start=()=>rola==="PODGLAD"&&jest("zarzadzanie")?"zarzadzanie":"szkolenie";
++const start=()=>rola==="PODGLAD"&&R.bhp.length?"sprawy":"szkolenie";
+ /* ── ekrany ── */
+ const N=R.napis,F=(s,o)=>s.replace(/\{([^}]+)\}/g,(x,k)=>k in o?o[k]:x);
+ function ekranSzkolenie(){const pk=program(),pr=R.prog[pk],d=ukonczone(),ms=modulyProg(pk);const n=ms.filter(m=>d.has(m)).length;
+@@ -279,16 +289,43 @@
+  const o=R.opisy.filter(x=>jest(x.id)).map(x=>`<a class="wiersz" href="#${x.id}"><span>${H(x.t)}</span></a>`).join("");
+  $("programy").innerHTML=`<div class="tresc"><div class="lista"><h2>Programy szkoleń</h2>${w}</div>${o?`<div class="lista"><h2>Opis szkoleń</h2>${o}</div>`:""}</div>`;
+  return "Szkolenia"}
+-function ekranWiedza(){const W=R.wiedza.filter(x=>jest(x.id)&&x.role.includes(rola));const k=W.map(x=>`<a class="kafel" href="#${x.id}"><i class="ik" aria-hidden="true">${x.ik}</i><div><b>${H(x.t)}</b>${x.o?`<span>${H(x.o)}</span>`:""}</div></a>`).join("");
++function ekranWiedza(){const W=R.wiedza.filter(x=>jest(x.id)&&x.role.includes(rola)&&!(rola==="PODGLAD"&&R.bhp.length&&x.bhp));const k=W.map(x=>`<a class="kafel" href="#${x.id}"><i class="ik" aria-hidden="true">${x.ik}</i><div><b>${H(x.t)}</b>${x.o?`<span>${H(x.o)}</span>`:""}</div></a>`).join("");
+  /* więcej niż 4 pozycje: na telefonie lista zamiast kafli, żeby ekran się nie przewijał (N-01) */
+  const l=W.length>4?`<div class="lista wiedza-krotka">${W.map(x=>`<a class="wiersz" href="#${x.id}"><span>${H(x.t)}</span></a>`).join("")}</div>`:"";
+  $("wiedza").innerHTML=`<div class="tresc"><div class="kafle${l?" zwin":""}">${k}</div>${l}</div>`;return R.czesci.WIEDZA}
+-function ekranZarzadzanie(){const z=R.zarz.filter(x=>jest(x.id));const r=x=>`<a class="wiersz" href="#${x.id}"><span>${H(x.t)}</span></a>`;
+- const pierw=z.filter(x=>x.id==="alerty"),reszta=z.filter(x=>x.id!=="alerty");
+- /* część zarządzania BHP (wspólna aplikacja, /pelny/aplikacja/): odnośnik z kursu (APLIKACJA_BHP_PRZYCISK), otwierany w tym samym oknie */
+- const apl=[...document.querySelectorAll("a[data-aplikacja-bhp]")].map(a=>`<a class="wiersz" href="${H(a.getAttribute("href"))}" target="_top"><span>${H(a.textContent)}</span></a>`).join("");
+- $("zarzadzanie").innerHTML=`<div class="tresc"><div class="lista dwie">${pierw.map(r).join("")}${reszta.map(r).join("")}${apl}</div></div>`;
+- return R.czesci.ZARZADZANIE}
++/* ── BHP w jednym oknie (etap 2): lista części, „Pracownicy i dokumenty”, strona części zarządzania BHP w ramie ── */
++const wiersz=(h,t,o)=>`<a class="wiersz" href="${H(h)}"><span>${H(t)}${o?`<small>${H(o)}</small>`:""}</span></a>`;
++function ekranBhp(cz){const s=cz[1]||"";
++ if(!s){$("bhp").innerHTML=`<div class="tresc"><div class="lista">${R.bhp.map(x=>wiersz("#bhp/"+x.id,x.t,x.o)).join("")}</div></div>`;return [R.czesci.BHP,null]}
++ if(s==="ludzie"&&!cz[2]){const z=R.zarz.filter(x=>jest(x.id));
++  $("bhp").innerHTML=`<div class="tresc"><div class="lista">${[{h:"#bhp/ludzie/strona",t:R.bhp.find(x=>x.id==="ludzie").strona_t}].concat(R.bhp_ludzie.map(x=>({h:"#bhp/"+x.plik.replace(/\.html$/,""),t:x.t}))).map(x=>wiersz(x.h,x.t)).join("")}</div>
++   <div class="lista dwie">${z.map(x=>wiersz("#"+x.id,x.t)).join("")}</div></div>`;
++  return [R.bhp.find(x=>x.id==="ludzie").t,"#bhp"]}
++ const b=R.bhp.find(x=>x.id===s),l=R.bhp_ludzie.find(x=>x.plik===s+".html"),pl=s==="index"?"index.html":b?b.plik:l?l.plik:null;
++ if(!pl){location.replace("#bhp");return ["",null]}
++ bhpStrona(pl,cz.slice(s==="ludzie"?3:2).join("/"));
++ if(s==="index")return [(R.sprawy.find(x=>x.h&&x.h.startsWith("#bhp/index"))||{}).t||R.czesci.SPRAWY,"#sprawy"];
++ return [s==="ludzie"?b.strona_t:b?b.t:l.t,s==="ludzie"||!b?"#bhp/ludzie":"#bhp"]}
++/* strona części zarządzania BHP w ramce: treść odszyfrowuje powłoka (P.strona), pasek tej części jest ukryty (tryb „w ramie”) */
++let BHP_W=null;
++function bhpStrona(pl,kot){const sec=$("bhp");$("main").setAttribute("data-przewijanie","dokument");
++ if(BHP_W===pl+"#"+kot&&sec.querySelector("iframe"))return;BHP_W=pl+"#"+kot;
++ if(!P||!P.strona){sec.innerHTML=`<div class="tresc"><div class="lista">${wiersz("aplikacja/"+pl,R.napis.BHP_OTWORZ||"Otwórz")}</div></div>`;return}
++ sec.innerHTML=`<p class="meta" role="status">Otwieranie…</p>`;
++ P.strona(pl).then(h=>{const f=document.createElement("iframe");f.className="bhp-ramka";f.title=pl;
++  const css=`<style>/*w-ramie*/body>div[style*="sticky"]:first-child,nav.pasek{display:none!important}body{margin:0!important}</style>`;
++  f.srcdoc=h.replace(/<\/head>/i,css+"</head>");sec.innerHTML="";sec.appendChild(f);
++  f.addEventListener("load",()=>{const d=f.contentDocument;if(!d)return;const dop=()=>{f.style.height=d.documentElement.scrollHeight+"px"};dop();
++   try{new ResizeObserver(dop).observe(d.body)}catch(e){}
++   if(kot){const c=d.getElementById(kot);if(c)setTimeout(()=>window.scrollTo(0,c.getBoundingClientRect().top+f.getBoundingClientRect().top+scrollY-64),0)}
++   d.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest("a[href]");if(!a)return;const h=a.getAttribute("href")||"";
++    let m=h.match(/^([a-z_]+)\.html(?:#(.*))?$/);
++    if(m){e.preventDefault();location.hash="#bhp/"+(m[1]==="ludzie"?"ludzie/strona":m[1])+(m[2]?"/"+m[2]:"");return}
++    if(/^\.\.\/?$/.test(h)){e.preventDefault();location.hash="#szkolenie";return}
++    if(/^#/.test(h)){e.preventDefault();const c=d.getElementById(h.slice(1));if(c)window.scrollTo(0,c.getBoundingClientRect().top+f.getBoundingClientRect().top+scrollY-64)}},true)})
++ }).catch(()=>{sec.innerHTML=`<div class="tresc"><p class="meta">${H(R.napis.BHP_BLAD||"Nie udało się otworzyć strony.")}</p></div>`})}
++function ekranSprawy(){const z=R.sprawy.filter(x=>!x.id||jest(x.id));
++ $("sprawy").innerHTML=`<div class="tresc"><div class="lista">${z.map(x=>wiersz(x.h||"#"+x.id,x.t,x.o)).join("")}</div></div>`;return R.czesci.SPRAWY}
+ function ekranKonto(){const o=R.konto.filter(x=>!x.id||jest(x.id));
+  $("konto").innerHTML=`<div class="tresc">${L?`<p class="powitanie">${H(F(N.KONTO_ZALOGOWANO,{"imię i nazwisko":L.nazwa}))}</p>`:""}<div class="menu-konta">${o.map(x=>x.id?`<a href="#${x.id}"><span aria-hidden="true">${x.ik}</span>${H(x.t)}</a>`:
+   `<a href="#konto" id="${x.akcja}"${x.akcja==="rama_wyloguj"?' class="wyl"':""}${x.akcja==="rama_zmien"&&!(L&&P)?" hidden":""}><span aria-hidden="true">${x.ik}</span>${H(x.t)}</a>`).join("")}</div></div>`;
+@@ -322,10 +359,12 @@
+ /* ── pasek górny i dolny ── */
+ function pasek(t,wstecz,ik){const a=$("rama_wstecz");$("rama_tytul").textContent=t;a.hidden=!wstecz;if(wstecz){a.href=wstecz;a.textContent=ik;a.setAttribute("aria-label",ik==="✕"?"Zamknij moduł":"W górę")}
+  const l=document.querySelector("#rama .logo_curl");if(l)l.hidden=!!wstecz;document.title=t?t+" – "+R.nazwa:R.nazwa}
+-function nawigacja(tryb,akt){const n=$("rama_dol");let h="";
++function nawigacja(tryb,akt,pod){const n=$("rama_dol");let h="";
+  if(tryb==="modul"){const ost=MK&&MK.k===MK.n-1;h=`<a href="#" data-krok="-1"><span class="i" aria-hidden="true">←</span>Wstecz</a><a class="akt" href="#" data-krok="1"><span class="i" aria-hidden="true">${ost?"✓":"→"}</span>${ost?"Zakończ":"Dalej"}</a>`;n.style.setProperty("--n",3)}
+  else{const cz=R.nawig.filter(c=>c.rola.includes(rola));n.style.setProperty("--n",cz.length+1);
+-  h=cz.map(c=>`<a href="#${c.id}"${c.cz===akt?' class="akt" aria-current="page"':""}><span class="i" aria-hidden="true">${c.ik}</span>${H(cz.length>3&&c.krotko?c.krotko:c.t)}</a>`).join("")}
++  h=cz.map(c=>`<a href="#${c.id}"${c.cz===akt?' class="akt" aria-current="page"':""}><span class="i" aria-hidden="true">${c.ik}</span><span class="dl">${H(c.t)}</span><span class="kr">${H(c.krotko||c.t)}</span></a>`
++   /* na komputerze (panel boczny) pozycje części BHP pod nią; na telefonie ukryte – lista na ekranie BHP */
++   +(c.id==="bhp"?R.bhp.map(x=>`<a class="pod${pod===x.id?" akt":""}" href="#bhp/${x.id}"${pod===x.id?' aria-current="page"':""}>${H(x.t)}</a>`).join(""):"")).join("")}
+  n.innerHTML=h+`<a class="alarm" href="#" id="rama_alarm_przycisk" role="button" aria-haspopup="dialog"><span class="i" aria-hidden="true">🚨</span>Alarm</a>`}
+ $("rama_dol").addEventListener("click",e=>{const a=e.target.closest("a");if(!a)return;
+  if(a.id==="rama_alarm_przycisk"){e.preventDefault();alarm(true);return}
+@@ -350,16 +389,18 @@
+ /* ── rysowanie ekranu po każdej zmianie adresu ── */
+ function rysuj(){try{if(P)P.adres(location.hash)}catch(e){}const cz=decodeURIComponent((location.hash||"").slice(1)).split("/");
+  /* część Zarządzanie tylko w trybie podglądu: inny adres #zarzadzanie lub ekran tej części wraca do ekranu startowego (kontrola całości, usterka B, 21.11.2026) */
+- if(rola!=="PODGLAD"&&(cz[0]==="zarzadzanie"||R.cz[cz[0]]==="ZARZADZANIE")){location.replace("#"+start());return}const s=document.querySelector("main section.on");const id=s?s.id:"";
++ if(rola!=="PODGLAD"&&(["bhp","sprawy","zarzadzanie"].includes(cz[0])||["ZARZADZANIE","SPRAWY"].includes(R.cz[cz[0]]))){location.replace("#"+start());return}
++ if(cz[0]==="zarzadzanie"){location.replace("#"+start());return}/* dawny adres części Zarządzanie */const s=document.querySelector("main section.on");const id=s?s.id:"";
+  const main=$("main");main.removeAttribute("data-przewijanie");MK=null;let t="",w=null,ik="←",akt=null;
+  if(id==="szkolenie"){t=ekranSzkolenie();akt="SZKOLENIE"}
+  else if(id==="temat"){t=ekranTemat(cz);w="#szkolenie";akt="SZKOLENIE"}
+  else if(id==="programy"){t=ekranProgramy();w="#szkolenie";akt="SZKOLENIE"}
+  else if(id==="wiedza"){t=ekranWiedza();akt="WIEDZA"}
+- else if(id==="zarzadzanie"){t=ekranZarzadzanie();akt="ZARZADZANIE"}
++ else if(id==="bhp"){[t,w]=ekranBhp(cz);akt=cz[1]==="index"?"SPRAWY":"BHP";if(!t)return;pasek(t,w,ik);nawigacja("glowny",akt,cz[1]||"");if(!(cz.length>2&&cz[1]!=="ludzie"))window.scrollTo(0,0);return}
++ else if(id==="sprawy"){t=ekranSprawy();akt="SPRAWY"}
+  else if(id==="konto"){t=ekranKonto();akt="KONTO"}
+  else if(/^m\d+$/.test(id)){const tm=SS.get("rama_temat");pasek(tyt(id),skad(id)||(tm?`#temat/${tm.pk}/${tm.nr}`:"#szkolenie"),"✕");wejdzModul(s,cz);return}
+- else if(id){t=tyt(id);w=rodzic(id);akt=R.cz[id]||null;main.setAttribute("data-przewijanie",R.przew[id]||"dokument");
++ else if(id){t=tyt(id);w=rodzic(id);akt={ZARZADZANIE:"BHP"}[R.cz[id]]||R.cz[id]||null;main.setAttribute("data-przewijanie",R.przew[id]||"dokument");
+   if(id==="test")uwagaTestu(s);else koniecDokumentu(s)}
+  pasek(t,w,ik);nawigacja("glowny",akt);window.scrollTo(0,0)}
+ addEventListener("hashchange",rysuj);/* bez popstate: przychodzi przed hashchange, gdy kurs jeszcze nie przełączył sekcji */
+@@ -438,9 +479,20 @@
+             continue
+         if s in sekcje:
+             wiedza.append({'id': s, 't': r['etykieta'], 'o': opis_k.get(s, ('', ''))[0], 'role': rr, 'ik': IK.get(s, '📄')})
++    dubel = {obiekt_id.get(fr) for fr in BHP_DUBLE_WIEDZY}
++    for x in wiedza:
++        x['bhp'] = x['id'] in dubel
+     zarz = [{'id': s, 't': r['etykieta']} for s, r in sorted(uklad.items(), key=lambda x: x[1]['kolejnosc']) if r['czesc'] == 'ZARZADZANIE' and s in sekcje]
++    sprawy = [{'id': s, 't': r['etykieta']} for s, r in sorted(uklad.items(), key=lambda x: x[1]['kolejnosc']) if r['czesc'] == 'SPRAWY' and s in sekcje]
++    # BHP (etap 2): etykiety z sekcja_ukladu (część BHP, sekcje bhp_<id>), tytuły stron z MANIFEST części zarządzania BHP
++    tyt_str = {x.get('plik_www', ''): x.get('tytul', '') for x in man.values()}
++    bhp = [{'id': b, 'plik': pl, 't': uklad['bhp_' + b]['etykieta'], 'strona_t': tyt_str.get(pl) or uklad['bhp_' + b]['etykieta']}
++           for b, pl in BHP_STRONY if 'bhp_' + b in uklad]
++    bhp_ludzie = [{'plik': pl, 't': uklad['bhp_' + pl[:-5]]['etykieta']} for pl in BHP_LUDZIE_STRONY if 'bhp_' + pl[:-5] in uklad]
++    sprawy += [{'h': '#bhp/' + s[len('bhp_'):].replace('_', '/'), 't': r['etykieta']}
++               for s, r in sorted(uklad.items(), key=lambda x: x[1]['kolejnosc']) if r['czesc'] == 'SPRAWY' and s.startswith('bhp_')]
+     if tryb == 'pracownik':
+-        zarz = []  # wersja dla pracowników: bez części Zarządzanie (usterka B kontroli całości, 21.11.2026)
++        zarz, sprawy, bhp, bhp_ludzie = [], [], [], []  # wersja dla pracowników: bez części BHP i Moje sprawy (usterka B kontroli całości, 21.11.2026)
+     opisy = [{'id': s, 't': uklad[s]['etykieta']} for s in ('start', 'szkwstepne', 'szkokresowe') if s in uklad]
+     # Konto (W-12): O aplikacji, Zmień osobę, Wyloguj; Ochrona danych na końcu (STOPKA)
+     assert uklad['rodo']['czesc'] == 'KONTO' and uklad['rodo']['polozenie'] == 'STOPKA', 'STOP W-12: ochrona danych poza stopką Konta'
+@@ -448,14 +500,15 @@
+              {'akcja': 'rama_zmien', 't': U['RAMA_ZMIEN_OSOBE'], 'ik': '🔁'},
+              {'akcja': 'rama_wyloguj', 't': U['RAMA_WYLOGUJ'], 'ik': '⏻'},
+              {'id': 'rodo', 't': uklad['rodo']['etykieta'], 'ik': '🔒'}]
+-    czesci = {'SZKOLENIE': 'Szkolenie', 'WIEDZA': 'Wiedza BHP', 'ZARZADZANIE': 'Zarządzanie', 'KONTO': 'Konto'}
++    czesci = {'SZKOLENIE': 'Szkolenie', 'WIEDZA': 'Wiedza BHP', 'BHP': 'BHP', 'SPRAWY': 'Moje sprawy', 'KONTO': 'Konto'}
+     nawig = [{'id': 'szkolenie', 'cz': 'SZKOLENIE', 'ik': '📘', 't': czesci['SZKOLENIE'], 'rola': ['PRACOWNIK', 'PODGLAD']},
+              {'id': 'wiedza', 'cz': 'WIEDZA', 'ik': '📚', 't': czesci['WIEDZA'], 'krotko': 'Wiedza', 'rola': ['PRACOWNIK', 'PODGLAD']},
+-             {'id': 'zarzadzanie', 'cz': 'ZARZADZANIE', 'ik': '🗂️', 't': czesci['ZARZADZANIE'], 'rola': ['PODGLAD'] if zarz else []},
++             {'id': 'bhp', 'cz': 'BHP', 'ik': '🦺', 't': czesci['BHP'], 'rola': ['PODGLAD'] if bhp else []},
++             {'id': 'sprawy', 'cz': 'SPRAWY', 'ik': '📋', 't': czesci['SPRAWY'], 'krotko': 'Sprawy', 'rola': ['PODGLAD'] if sprawy else []},
+              {'id': 'konto', 'cz': 'KONTO', 'ik': '👤', 't': czesci['KONTO'], 'rola': ['PRACOWNIK', 'PODGLAD']}]
+     R = {'nazwa': U['RAMA_NAZWA'], 'prog': progr, 'domyslny': {'kier': 'OKR_KIER', 'prac': 'OKR_CURL_2026_11', 'brak': 'INSTR_OGOLNY'},
+          'tyt': tyt, 'cz': cz_sek, 'rodzic': rodzic, 'przew': przew, 'grupa': {m: r['grupa_nazwa'] for m, r in modt.items()},
+-         'wiedza': wiedza, 'zarz': zarz, 'opisy': opisy, 'konto': konto, 'czesci': czesci, 'nawig': nawig, 'ekrany': list(EKRANY),
++         'wiedza': wiedza, 'zarz': zarz, 'bhp': bhp, 'bhp_ludzie': bhp_ludzie, 'sprawy': sprawy, 'opisy': opisy, 'konto': konto, 'czesci': czesci, 'nawig': nawig, 'ekrany': list(EKRANY),
+          'wstep': 'Wprowadzenie', 'slowa': 70, 'napis': N,
+          'dziennik': U['RAMA_DZIENNIK_WEJSC'] == '1' or (bool(os.environ.get('PINY_WWW_TEST')) and os.environ.get('RAMA_DZIENNIK_WEJSC_TEST') == '1')}
+     # RAMA_DZIENNIK_WEJSC_TEST działa tylko w budowie testowej (PINY_WWW_TEST, PIN-y TEST<KOD>): test zachowania dziennika wejść R9
+@@ -523,4 +576,4 @@
+     assert '__' not in re.sub(r'/\*.*?\*/', '', css), 'STOP rama: nieznany znacznik w stylu'
+     doc = doc[:i] + css + doc[i:]
+     j = doc.rfind('</body>'); doc = doc[:j] + dane_js + JS + doc[j:]
+-    return doc, {'ekrany': len(EKRANY), 'programy': {k: len(v['tem']) for k, v in progr.items()}, 'wiedza': len(wiedza), 'zarzadzanie': len(zarz)}
++    return doc, {'ekrany': len(EKRANY), 'programy': {k: len(v['tem']) for k, v in progr.items()}, 'wiedza': len(wiedza), 'zarzadzanie': len(zarz), 'bhp': len(bhp), 'sprawy': len(sprawy)}

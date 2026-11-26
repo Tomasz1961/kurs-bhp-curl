@@ -1,0 +1,8 @@
+sekcja	czesc	kolejnosc	rola	etykieta	polozenie	zgloszenie
+bhp_mapa	BHP	10	PODGLAD	Mapa obiektu	MENU	ETAP2-TS-2026-11-26-1930
+bhp_srodki	BHP	20	PODGLAD	Środki ochrony	MENU	ETAP2-TS-2026-11-26-1930
+bhp_ludzie	BHP	30	PODGLAD	Pracownicy i dokumenty	MENU	ETAP2-TS-2026-11-26-1930
+bhp_szkolenia	BHP	40	PODGLAD	Szkolenia przeprowadzone	MENU	ETAP2-TS-2026-11-26-1930
+bhp_dokumenty	BHP	50	PODGLAD	Dokumenty	MENU	ETAP2-TS-2026-11-26-1930
+bhp_index_terminy	SPRAWY	20	PODGLAD	Najbliższe terminy	MENU	ETAP2-TS-2026-11-26-1930
+alerty	SPRAWY (zamiast ZARZADZANIE)	10	PODGLAD	Sprawy do załatwienia	MENU	ETAP2-TS-2026-11-26-1930

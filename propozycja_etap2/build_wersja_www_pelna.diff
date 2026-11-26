@@ -1,0 +1,15 @@
+--- /mnt/project-files/bhp/skrypty/build_wersja_www_pelna.py	2026-11-21 03:18:15.129625000 +0000
++++ skrypty/build_wersja_www_pelna.py	2026-11-26 19:36:57.167213361 +0000
+@@ -233,7 +233,11 @@
+    const b=new Uint8Array(await r.arrayBuffer());const pdf=await crypto.subtle.decrypt({name:"AES-GCM",iv:b.slice(0,12)},KL,b.slice(12));
+    const url=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));window.__ostatniaKarta=pdf.byteLength;
+    if(w&&!w.closed)w.location.href=url;else{const a=document.createElement("a");a.href=url;a.download=n;document.body.appendChild(a);a.click();a.remove()}
+-   setTimeout(()=>URL.revokeObjectURL(url),120000);return pdf.byteLength}};
++   setTimeout(()=>URL.revokeObjectURL(url),120000);return pdf.byteLength},
++  /* etap 2 (BHP w jednym oknie, propozycja 26.11.2026): strona części zarządzania BHP aplikacja/<strona>.html.bin, szyfrowana kluczem tej strony
++     (jak karty charakterystyki) – rama pokazuje ją w swoim oknie, bez drugiego hasła i bez drugiego menu */
++  async strona(n){if(!/^[a-z_]+\\.html$/.test(n)||!KL)throw new Error("strona");const r=await fetch("aplikacja/"+n+".bin",{cache:"no-store"});if(!r.ok)throw new Error("brak pliku");
++   const b=new Uint8Array(await r.arrayBuffer());return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b.slice(0,12)},KL,b.slice(12)))}};
+  /* ramka startuje od pustego dokumentu z adresu blob (zwykła nawigacja, nie początkowy about:blank): wpisy historii sekcji są wtedy
+     przejściami w obrębie jednego dokumentu i Wstecz nie czyści ramki */
+  const u0=URL.createObjectURL(new Blob(["<!doctype html><title></title>"],{type:"text/html"}));
