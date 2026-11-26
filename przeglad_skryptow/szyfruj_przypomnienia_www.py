@@ -9,8 +9,9 @@ Reguły (STOP, kod ≠ 0):
   PR-02 sha256(hasło) = wartość w ADM dla każdego obszaru;
   PR-03 treść bez danych osobowych z kart i bez płac (KARTAOS, DOKPOD, PESEL, wynagrodzenie, zaszeregowanie, stawka, osadzony PDF);
   PR-04 hasło obszaru ≠ hasło /pelny/ i /pracownik/, hasła obszarów różne między sobą, co najmniej 12 znaków.
-Testy negatywne w każdym przebiegu: podłożony zły skrót, płaca w treści i powtórzone hasło są wykryte. Bez LLM."""
-import os, sys, re, json, base64, hashlib, sqlite3, shutil
+Testy negatywne w każdym przebiegu: podłożony zły skrót, płaca w treści (także rozdzielona znacznikiem), PESEL (także encją HTML),
+powtórzone hasło i brak hasła /pelny/ są wykryte. Zapisana strona musi być dokładnie ładowaczem (zgodny_z_ladowaczem). Bez LLM."""
+import os, sys, re, json, base64, hashlib, sqlite3, shutil, html
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -22,6 +23,10 @@ ZAKAZ = re.compile(r'KARTAOS|DOKPOD|PESEL|wynagrodz|zaszeregowan|\bstawk\w*|zł\
 def pesele(t):   # uwaga przeglądu #44: numer PESEL w treści (11 cyfr z poprawną cyfrą kontrolną), nie tylko słowo „PESEL”
     w = (1, 3, 7, 9, 1, 3, 7, 9, 1, 3)
     return sorted({n for n in re.findall(r'(?<!\d)\d{11}(?!\d)', t) if (10 - sum(int(a) * b for a, b in zip(n, w)) % 10) % 10 == int(n[10])})
+
+def widoki(t):   # uwaga przeglądu #44 (r3): też tekst widoczny – encje HTML zdekodowane, znaczniki usunięte (sklejone) albo zastąpione spacją
+    bez_wierszowych = re.sub(r'(?i)</?(?:span|b|i|em|strong|a|sup|sub|small|mark|u|s|font|abbr|wbr)\b[^>]*>', '', t)
+    return (t, html.unescape(re.sub(r'<[^>]*>', ' ', bez_wierszowych)), html.unescape(re.sub(r'<[^>]*>', ' ', t)))
 
 def adm_skroty(adm=ADM):
     c = sqlite3.connect(f'file:{adm}?mode=ro', uri=True)
@@ -36,9 +41,11 @@ def kontrola(obszary, hasla, skroty, tresci, inne_hasla):
     for ob in sorted(set(hasla) & set(skroty)):
         if hashlib.sha256(hasla[ob].encode()).hexdigest() != skroty[ob]: W.append(f'PR-02 {ob}: skrót hasła ≠ ADM')
     for ob, t in sorted(tresci.items()):
-        z = sorted(set(m.group(0) for m in ZAKAZ.finditer(t)))
+        wv = widoki(t)
+        z = sorted(set(m.group(0) for v in wv for m in ZAKAZ.finditer(v)))
         if z: W.append(f'PR-03 {ob}: zakazana treść {z}')
-        if pesele(t): W.append(f'PR-03 {ob}: numer PESEL w treści ({len(pesele(t))})')
+        ps = set(pesele(wv[0])) | set(pesele(wv[2]))   # numery: surowy HTML i tekst ze spacjami (sklejenie komórek dałoby fałszywe numery)
+        if ps: W.append(f'PR-03 {ob}: numer PESEL w treści ({len(ps)})')
     hs = list(hasla.values())
     if len(set(hs)) != len(hs): W.append('PR-04 powtórzone hasło obszaru')
     if any(len(h) < 12 for h in hs): W.append('PR-04 hasło krótsze niż 12 znaków')
@@ -55,7 +62,10 @@ def test_negatywny(obszary, hasla, skroty, tresci, inne):
     ps = dict(tresci); ps[ob] = ps[ob] + '<td>44051401458</td>'   # PESEL z poprawną cyfrą kontrolną, bez słowa „PESEL”
     pw = dict(hasla); pw[ob2] = pw[ob]
     sk2 = dict(skroty); sk2[ob2] = hashlib.sha256(pw[ob2].encode()).hexdigest()   # skrót zgodny, żeby PR-02 nie zasłonił PR-04
-    return [ma(kontrola(obszary, hasla, zly, tresci, inne), 'PR-02'), ma(kontrola(obszary, hasla, skroty, pl, inne), 'PR-03'),
+    en = dict(tresci); en[ob] = en[ob] + '<td>&#52;4051401458</td>'                  # PESEL zapisany encją HTML
+    sp = dict(tresci); sp[ob] = sp[ob] + '<p>Sta<span>wka</span> zasadnicza: 5000 zł</p>'   # słowo rozdzielone znacznikiem
+    return [ma(kontrola(obszary, hasla, skroty, en, inne), 'PR-03'), ma(kontrola(obszary, hasla, skroty, sp, inne), 'PR-03'),
+            ma(kontrola(obszary, hasla, zly, tresci, inne), 'PR-02'), ma(kontrola(obszary, hasla, skroty, pl, inne), 'PR-03'),
             ma(kontrola(obszary, pw, sk2, tresci, inne), 'PR-04 powtórzone'), ma(kontrola(obszary, hasla, skroty, ps, inne), 'PR-03'),
             ma(kontrola(obszary, hasla, skroty, tresci, ('', inne[1])), 'PR-04 brak hasła')]
 
@@ -82,6 +92,10 @@ def szyfruj(doc, haslo):
     b = lambda x: base64.b64encode(x).decode()
     return LOADER.replace('__S__', b(salt)).replace('__I__', b(iv)).replace('__N__', str(ITER)).replace('__C__', b(ct))
 
+def zgodny_z_ladowaczem(strona):   # uwaga przeglądu #44 (r3): cała strona = ładowacz; zmieniać się mogą tylko wartości szyfru i liczba iteracji
+    s = re.sub(r'const D=\{s:"[A-Za-z0-9+/=]+",i:"[A-Za-z0-9+/=]+",n:\d+,c:"[A-Za-z0-9+/=]+"\}', 'const D={s:"__S__",i:"__I__",n:__N__,c:"__C__"}', strona, count=1)
+    return s == LOADER
+
 def slug(ob): return re.sub(r'^S_', '', ob).lower()
 
 def main():
@@ -103,7 +117,9 @@ def main():
     if os.path.isdir(cel): shutil.rmtree(cel)
     for ob in obszary:
         os.makedirs(os.path.join(cel, slug(ob)), exist_ok=True)
-        open(os.path.join(cel, slug(ob), 'index.html'), 'w', encoding='utf-8').write(szyfruj(tresci[ob], hasla[ob]))
+        s = szyfruj(tresci[ob], hasla[ob])
+        if not zgodny_z_ladowaczem(s) or zgodny_z_ladowaczem(s + '<p>jawne</p>'): sys.exit(f'STOP PR-03 {ob}: strona różna od ładowacza albo kontrola ładowacza nie działa')
+        open(os.path.join(cel, slug(ob), 'index.html'), 'w', encoding='utf-8').write(s)
     print(f'przypomnienia: {len(obszary)} stron zaszyfrowanych → {cel} ({", ".join(slug(o) for o in obszary)}) | testy negatywne {sum(neg)}/{len(neg)}')
 
 if __name__ == '__main__':
