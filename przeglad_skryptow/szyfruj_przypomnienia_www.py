@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import hashes
 
 ADM = '/mnt/project-files/adm/adm.sqlite'
 ITER = 600_000
-ZAKAZ = re.compile(r'KARTAOS|DOKPOD|PESEL|wynagrodz|zaszeregowan|stawk[aię] godzinow|JVBERi0', re.I)
+ZAKAZ = re.compile(r'KARTAOS|DOKPOD|PESEL|wynagrodz|zaszeregowan|\bstawk\w*|zł\s*/\s*(?:h|godz)|JVBERi0', re.I)  # uwaga przeglądu #44: każda stawka, nie tylko godzinowa
 
 def adm_skroty(adm=ADM):
     c = sqlite3.connect(f'file:{adm}?mode=ro', uri=True)
@@ -41,12 +41,15 @@ def kontrola(obszary, hasla, skroty, tresci, inne_hasla):
     return W
 
 def test_negatywny(obszary, hasla, skroty, tresci, inne):
-    ob = sorted(obszary)[0]
+    # uwaga przeglądu #44: każdy podłożony błąd musi dać SWOJĄ regułę (a nie dowolny błąd)
+    ob, ob2 = sorted(obszary)[:2]
+    ma = lambda W, r: any(w.startswith(r) for w in W)
     zly = dict(skroty); zly[ob] = '0' * 64
-    pl = dict(tresci); pl[ob] = pl[ob] + '<p>wynagrodzenie 5000 zł</p>'
-    pw = dict(hasla); pw[sorted(obszary)[1]] = pw[ob]
-    return [bool(kontrola(obszary, hasla, zly, tresci, inne)), bool(kontrola(obszary, hasla, skroty, pl, inne)),
-            bool(kontrola(obszary, pw, skroty, tresci, inne))]
+    pl = dict(tresci); pl[ob] = pl[ob] + '<p>Stawka zasadnicza: 5000 zł</p>'
+    pw = dict(hasla); pw[ob2] = pw[ob]
+    sk2 = dict(skroty); sk2[ob2] = hashlib.sha256(pw[ob2].encode()).hexdigest()   # skrót zgodny, żeby PR-02 nie zasłonił PR-04
+    return [ma(kontrola(obszary, hasla, zly, tresci, inne), 'PR-02'), ma(kontrola(obszary, hasla, skroty, pl, inne), 'PR-03'),
+            ma(kontrola(obszary, pw, sk2, tresci, inne), 'PR-04 powtórzone')]
 
 LOADER = '''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Przypomnienia</title>
@@ -54,7 +57,7 @@ LOADER = '''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta nam
 .box{background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 32px);box-sizing:border-box}h1{font-size:20px;margin:0 0 8px}p{font-size:14px;color:#555}
 input,button{font-size:16px;padding:10px;border-radius:8px;border:1px solid #bbb;width:100%;box-sizing:border-box;margin-top:8px;min-height:48px}button{background:#14532d;color:#fff;border:0;cursor:pointer}#st{min-height:1.4em;color:#b91c1c}</style></head>
 <body><form class="box" id="f"><h1>Przypomnienia</h1><p>Strona dla osób upoważnionych. Wpisz hasło otrzymane od administratora.</p>
-<input id="h" type="password" autocomplete="current-password" placeholder="Hasło" autofocus><button>Otwórz</button><p id="st"></p></form>
+<input id="h" type="password" autocomplete="current-password" placeholder="Hasło" autofocus><button>Otwórz</button><p id="st" role="status" aria-live="polite"></p></form>
 <script>(()=>{const D={s:"__S__",i:"__I__",n:__N__,c:"__C__"};const u=b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
 document.getElementById("f").addEventListener("submit",async e=>{e.preventDefault();const st=document.getElementById("st");st.style.color="#555";st.textContent="Otwieranie…";
  try{const k0=await crypto.subtle.importKey("raw",new TextEncoder().encode(document.getElementById("h").value),"PBKDF2",false,["deriveKey"]);
@@ -76,7 +79,8 @@ def slug(ob): return re.sub(r'^S_', '', ob).lower()
 def main():
     jaw = os.environ.get('PRZYPOMNIENIA_JAWNE') or sys.exit('STOP PR-01: brak PRZYPOMNIENIA_JAWNE (katalog z kroku 6p)')
     repo = os.environ.get('REPO_WWW') or sys.exit('STOP PR-01: brak REPO_WWW')
-    if os.path.realpath(jaw).startswith(os.path.realpath(repo) + os.sep): sys.exit('STOP PR-01: treść jawna wewnątrz REPO_WWW')
+    _j, _r = os.path.realpath(jaw), os.path.realpath(repo)   # uwaga przeglądu #44: także ten sam katalog (i przez dowiązanie)
+    if _j == _r or _j.startswith(_r + os.sep): sys.exit('STOP PR-01: treść jawna w REPO_WWW')
     hasla = json.loads(os.environ.get('HASLA_PRZYP') or sys.exit('STOP PR-01: brak HASLA_PRZYP'))
     obszary = sorted(d for d in os.listdir(jaw) if os.path.isfile(os.path.join(jaw, d, 'index.html')))
     tresci = {ob: open(os.path.join(jaw, ob, 'index.html'), encoding='utf-8').read() for ob in obszary}

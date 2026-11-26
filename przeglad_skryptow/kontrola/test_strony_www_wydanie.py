@@ -172,7 +172,7 @@ for _d in _pp:
         _rp += [f'{_d}: {x}' for x in rekordy_osobowe(_doc)]
         _rp += [f'{_d}: {m}' for m in sorted(set(re.findall(r'(?i)KARTAOS|DOKPOD|PESEL|wynagrodz\w*|zaszeregowan\w*', _doc)))]
     except Exception as e: _rp.append(f'{_d}: nie da się sprawdzić ({type(e).__name__})')
-wynik('W-08p', (not _pp and not _hp) or (sorted(_sl) == _pp and not _rp),
+wynik('W-08p', bool(_pp) and sorted(_sl) == _pp and not _rp,   # uwaga przeglądu #44: brak stron albo haseł = STOP
       f'strony przypomnień ({len(_pp)}: {", ".join(_pp)}; haseł {len(_hp)}) zaszyfrowane hasłem obszaru, bez danych osobowych i płac' + (': ' + '; '.join(_rp) if _rp else ''))
 
 czas = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
