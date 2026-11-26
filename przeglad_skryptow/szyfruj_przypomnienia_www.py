@@ -19,6 +19,10 @@ ADM = '/mnt/project-files/adm/adm.sqlite'
 ITER = 600_000
 ZAKAZ = re.compile(r'KARTAOS|DOKPOD|PESEL|wynagrodz|zaszeregowan|\bstawk\w*|zł\s*/\s*(?:h|godz)|JVBERi0', re.I)  # uwaga przeglądu #44: każda stawka, nie tylko godzinowa
 
+def pesele(t):   # uwaga przeglądu #44: numer PESEL w treści (11 cyfr z poprawną cyfrą kontrolną), nie tylko słowo „PESEL”
+    w = (1, 3, 7, 9, 1, 3, 7, 9, 1, 3)
+    return sorted({n for n in re.findall(r'(?<!\d)\d{11}(?!\d)', t) if (10 - sum(int(a) * b for a, b in zip(n, w)) % 10) % 10 == int(n[10])})
+
 def adm_skroty(adm=ADM):
     c = sqlite3.connect(f'file:{adm}?mode=ro', uri=True)
     r = {k[len('HASLO_PRZYP_'):-len('_SHA256')]: v for k, v in
@@ -34,9 +38,11 @@ def kontrola(obszary, hasla, skroty, tresci, inne_hasla):
     for ob, t in sorted(tresci.items()):
         z = sorted(set(m.group(0) for m in ZAKAZ.finditer(t)))
         if z: W.append(f'PR-03 {ob}: zakazana treść {z}')
+        if pesele(t): W.append(f'PR-03 {ob}: numer PESEL w treści ({len(pesele(t))})')
     hs = list(hasla.values())
     if len(set(hs)) != len(hs): W.append('PR-04 powtórzone hasło obszaru')
     if any(len(h) < 12 for h in hs): W.append('PR-04 hasło krótsze niż 12 znaków')
+    if not all(inne_hasla): W.append('PR-04 brak hasła /pelny/ albo /pracownik/ do porównania (HASLO_WWW, HASLO_WWW_PRAC)')   # uwaga przeglądu #44
     if set(hs) & set(x for x in inne_hasla if x): W.append('PR-04 hasło obszaru równe hasłu /pelny/ albo /pracownik/')
     return W
 
@@ -46,10 +52,12 @@ def test_negatywny(obszary, hasla, skroty, tresci, inne):
     ma = lambda W, r: any(w.startswith(r) for w in W)
     zly = dict(skroty); zly[ob] = '0' * 64
     pl = dict(tresci); pl[ob] = pl[ob] + '<p>Stawka zasadnicza: 5000 zł</p>'
+    ps = dict(tresci); ps[ob] = ps[ob] + '<td>44051401458</td>'   # PESEL z poprawną cyfrą kontrolną, bez słowa „PESEL”
     pw = dict(hasla); pw[ob2] = pw[ob]
     sk2 = dict(skroty); sk2[ob2] = hashlib.sha256(pw[ob2].encode()).hexdigest()   # skrót zgodny, żeby PR-02 nie zasłonił PR-04
     return [ma(kontrola(obszary, hasla, zly, tresci, inne), 'PR-02'), ma(kontrola(obszary, hasla, skroty, pl, inne), 'PR-03'),
-            ma(kontrola(obszary, pw, sk2, tresci, inne), 'PR-04 powtórzone')]
+            ma(kontrola(obszary, pw, sk2, tresci, inne), 'PR-04 powtórzone'), ma(kontrola(obszary, hasla, skroty, ps, inne), 'PR-03'),
+            ma(kontrola(obszary, hasla, skroty, tresci, ('', inne[1])), 'PR-04 brak hasła')]
 
 LOADER = '''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Przypomnienia</title>
