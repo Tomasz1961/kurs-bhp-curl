@@ -8,7 +8,9 @@ Użycie: sprawdz_publikacje.py KATALOG   – kod 1, gdy w katalogu jest dowiąza
 import os, re, sys, tempfile
 W = r'(?:wersja-\d{4}-\d\d-\d\d/)?'
 D = re.compile(W + r'(?:(?:pelny|pracownik|pelny/aplikacja)/)?zapis\.json|\.nojekyll|index\.html|' + W
-               + r'(?:pelny|pracownik|pelny/aplikacja)/index\.html|' + W + r'(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin')
+               + r'(?:pelny|pracownik|pelny/aplikacja)/index\.html|' + W + r'(?:pelny|pracownik)/sds/[A-Za-z0-9_.-]+\.bin|'
+               + W + r'przypomnienia/[a-z_]+/index\.html')   # 26.11.2026: strony przypomnień obszarów (jak W-07 w teście wydania)
+ZASZ = re.compile(rb'const D=\{s:"[A-Za-z0-9+/=]+",i:"[A-Za-z0-9+/=]+",n:\d+,c:"[A-Za-z0-9+/=]+"\}')   # ładowacz szyfru AES-GCM
 
 
 def sprawdz(kat):
@@ -23,6 +25,8 @@ def sprawdz(kat):
                     zle.append(r + ': plik spoza listy dozwolonych')
                 elif b'%PDF-' in open(p, 'rb').read(1024):
                     zle.append(r + ': jawny PDF')
+                elif r.split('/')[-3:-2] == ['przypomnienia'] and not ZASZ.search(open(p, 'rb').read()):
+                    zle.append(r + ': strona przypomnień bez szyfru')
     return zle
 
 
@@ -30,11 +34,15 @@ def negatywny():
     with tempfile.TemporaryDirectory() as T:
         dobry = os.path.join(T, 'dobry'); os.makedirs(f'{dobry}/pelny/sds')
         open(f'{dobry}/index.html', 'w').write('<html></html>'); open(f'{dobry}/pelny/sds/a.pdf.bin', 'wb').write(b'\x00' * 64)
+        os.makedirs(f'{dobry}/przypomnienia/biurowa')
+        open(f'{dobry}/przypomnienia/biurowa/index.html', 'w').write('<script>const D={s:"QQ==",i:"QQ==",n:600000,c:"QQ=="};</script>')
         open(f'{T}/jawna.pdf', 'wb').write(b'%PDF-1.4 jawna'); os.makedirs(f'{T}/poza/sds'); open(f'{T}/poza/sds/b.pdf', 'wb').write(b'%PDF-1.4')
         przypadki = {
             'dowiązanie do jawnego PDF udające kartę zaszyfrowaną': lambda d: os.symlink(f'{T}/jawna.pdf', f'{d}/pelny/sds/x.pdf.bin'),
             'dowiązanie do katalogu z jawnymi kartami': lambda d: os.symlink(f'{T}/poza/sds', f'{d}/pracownik'),
             'jawny PDF udający kartę zaszyfrowaną': lambda d: open(f'{d}/pelny/sds/y.pdf.bin', 'wb').write(b'%PDF-1.4'),
+            'jawna strona przypomnień': lambda d: (os.makedirs(f'{d}/przypomnienia/biurowa'),
+                                                   open(f'{d}/przypomnienia/biurowa/index.html', 'w').write('<p>jawna treść</p>')),
         }
         bledy = 0
         if sprawdz(dobry):
